@@ -2,8 +2,8 @@ import { createElement as h, Fragment, useEffect, useLayoutEffect, useMemo, useR
 import { createPortal } from 'react-dom'
 import { MarkdownText } from './dsh-primitives.js'
 import { inkText } from './inks.js'
-import { linkMentions, mentionTarget, dayLabel, contentText, stripHeader, isHiddenTurn, isRelayContext, relaysBefore, relayPart, commRunOf, toolName, toolArgs, reminderPrompts, elapsedLabel, clockLabel, messageClock } from './text.js'
-import { SmileIcon, ReplyIcon, DotsIcon, CheckIcon, DownloadIcon, CopyIcon, MemoryIcon } from './icons.js'
+import { linkMentions, mentionTarget, dayLabel, contentText, stripHeader, speakableText, isHiddenTurn, isRelayContext, relaysBefore, relayPart, commRunOf, toolName, toolArgs, reminderPrompts, elapsedLabel, clockLabel, messageClock } from './text.js'
+import { SmileIcon, ReplyIcon, DotsIcon, CheckIcon, DownloadIcon, CopyIcon, MemoryIcon, SpeakerIcon } from './icons.js'
 import { colorOf, toolState, BotMark, RoomAvatar } from './mark.js'
 import { SettledQuestion, PendingQuestion } from './questions.js'
 import { AnsweredReply, WidgetCell } from './widget-cell.js'
@@ -71,7 +71,7 @@ function Bubble({ text, index, roster, selfId, actions, sessionId, msgKey, menti
       h('div', { className: 'bt-bubble', 'data-folded': folded || undefined },
         control ? h('div', { className: 'bt-fold-body' }, body) : body,
         control),
-      live ? null : h(MessageTools, { text: folded ? text : shown, name: roster.byId[selfId]?.name ?? t('Bot'), sessionId, react: key ? emoji => actions.toggleReaction(msgKey, index, emoji) : undefined, actions, open: toolsOpen })),
+      live ? null : h(MessageTools, { text: folded ? text : shown, name: roster.byId[selfId]?.name ?? t('Bot'), sessionId, botId: selfId, react: key ? emoji => actions.toggleReaction(msgKey, index, emoji) : undefined, actions, open: toolsOpen })),
     picked.length ? h('div', { className: 'bt-reacts' }, picked.map(emoji => h('button', {
       key: emoji, type: 'button', className: 'bt-react', 'aria-label': t('Remove reaction {emoji}', { emoji }), onClick: () => actions.toggleReaction(msgKey, index, emoji),
     }, emoji))) : null)
@@ -98,18 +98,33 @@ function useDismiss(open, close, refs) {
   }, [open])
 }
 
-// The hover toolbar beside a reply bubble: Add reaction, Reply, More. `open` is
+// One clip plays at a time: starting a Listen stops the one before it.
+let speakingClip = null
+const stopSpeaking = () => {
+  if (speakingClip === null) return
+  speakingClip.pause()
+  speakingClip = null
+}
+
+// The hover toolbar beside a reply bubble: Add reaction, Reply, Listen, More. `open` is
 // the touch fallback: a tap on the bubble toggles it (see Bubble).
-function MessageTools({ text, name, sessionId, react, actions, open: tapped }) {
+function MessageTools({ text, name, sessionId, botId, react, actions, open: tapped }) {
   // The anchor element is kept, not its rect: the visible viewport can move
   // (on-screen keyboard) while the popover is open.
   const [panel, setPanel] = useState(null)
   const [copied, setCopied] = useState(false)
+  const [speech, setSpeech] = useState(null)
+  const [note, setNote] = useState('')
   const tools = useRef(null)
   const pop = useRef(null)
   const tick = useViewport()
   const close = () => setPanel(null)
   useDismiss(panel !== null, close, [tools, pop])
+  useEffect(() => {
+    if (!note) return undefined
+    const timer = setTimeout(() => setNote(''), 3200)
+    return () => clearTimeout(timer)
+  }, [note])
   const open = (kind, event) => { if (panel?.kind === kind) { close(); return } setPanel({ kind, node: event.currentTarget }) }
   const place = useMemo(() => {
     if (!panel) return null
@@ -130,10 +145,32 @@ function MessageTools({ text, name, sessionId, react, actions, open: tapped }) {
     link.click()
     setTimeout(() => URL.revokeObjectURL(url), 1000)
   }
+  const listen = async () => {
+    if (speech === 'playing') { stopSpeaking(); setSpeech(null); return }
+    if (speech === 'loading') return
+    setSpeech('loading')
+    setNote('')
+    try {
+      const value = await call('tts', { text: speakableText(text), botId })
+      const clip = new Audio(`data:${value.mime};base64,${value.audio}`)
+      stopSpeaking()
+      speakingClip = clip
+      clip.onended = () => { if (speakingClip === clip) speakingClip = null; setSpeech(current => (current === 'playing' ? null : current)) }
+      clip.onerror = () => { if (speakingClip === clip) speakingClip = null; setSpeech(null); setNote(t('Could not play this audio.')) }
+      await clip.play()
+      setSpeech('playing')
+    } catch (error) {
+      stopSpeaking()
+      setSpeech(null)
+      setNote(error?.message ?? String(error))
+    }
+  }
   const item = (label, Icon, run) => h('button', { key: label, type: 'button', role: 'menuitem', onClick: () => { close(); run() } }, h(Icon), label)
   return h('div', { ref: tools, className: 'bt-tools', 'data-open': panel !== null || tapped || undefined },
     react ? h('button', { type: 'button', className: 'bt-tool', 'aria-label': t('Add reaction'), title: t('Add reaction'), 'aria-expanded': panel?.kind === 'react', onClick: event => open('react', event) }, h(SmileIcon)) : null,
     sessionId ? h('button', { type: 'button', className: 'bt-tool', 'aria-label': t('Reply'), title: t('Reply'), onClick: () => actions.quote(sessionId, text) }, h(ReplyIcon)) : null,
+    h('button', { type: 'button', className: 'bt-tool', 'aria-label': speech === 'playing' ? t('Stop listening') : t('Listen'), title: speech === 'playing' ? t('Stop listening') : t('Listen'), 'aria-pressed': speech === 'playing' || undefined, 'aria-busy': speech === 'loading' || undefined, onClick: () => { void listen() } }, h(SpeakerIcon)),
+    note ? h('span', { className: 'bt-tool-note', role: 'status' }, note) : null,
     h('button', { type: 'button', className: 'bt-tool', 'aria-label': t('More message actions'), title: t('More'), 'aria-haspopup': 'menu', 'aria-expanded': panel?.kind === 'more', onClick: event => open('more', event) }, copied ? h(CheckIcon) : h(DotsIcon)),
     panel?.kind === 'react' ? createPortal(h('div', { ref: pop, className: 'bt-react-strip', role: 'menu', 'aria-label': t('Reactions'), style: place },
       REACTIONS.map(emoji => h('button', { key: emoji, type: 'button', role: 'menuitem', 'aria-label': emoji, onClick: () => { close(); react(emoji) } }, emoji))), document.body) : null,

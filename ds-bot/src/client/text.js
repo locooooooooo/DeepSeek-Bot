@@ -90,6 +90,11 @@ export function reminderPrompts(text) {
 }
 export const stripHeader = text => text.replace(HEADER, '')
 
+// What a speech service should hear: the message without its header, code
+// blocks, link targets, and Markdown marks. Shared by the voice chat's browser
+// synthesis and the Listen button's text-to-speech request.
+export const speakableText = text => stripHeader(text).replace(/```[\s\S]*?```/g, ' ').replace(/\[([^\]]*)\]\([^)]*\)/g, '$1').replace(/[*_`#>|~-]+/g, ' ').replace(/\s+/g, ' ').trim()
+
 // Of the Bots in a conversation, the one whose memory changed last, by the host's
 // clock: changes reaching one window in the same poll share a `seen` time.
 export function latestMemoryChange(news, ids) {

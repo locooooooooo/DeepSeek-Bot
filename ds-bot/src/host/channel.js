@@ -68,6 +68,8 @@ export function install(rt) {
     permissions: rt.permissionCatalog?.() ?? null,
     modelsKey: modelsKey(),
     prefs: state.prefs,
+    // The Voice page's view of text-to-speech; the key itself never leaves the host.
+    tts: rt.ttsView?.() ?? null,
     // Whether a Desktop window should serve Bot browser reads (see browser.js).
     browser: rt.browserEnabled,
     // False when config.memory turns memory off: no Memory row or panel.
@@ -180,6 +182,13 @@ export function install(rt) {
           await rt.load()
           await setPrefs(body)
           return ok(state.prefs)
+        // Speak one message's text; `botId` picks that Bot's voice. Bills the
+        // user's MiniMax key, so it is never served by a read-only host.
+        case 'tts':
+          return ok(await rt.ttsSynthesize(body))
+        case 'tts-save':
+          await rt.load()
+          return ok(await rt.ttsSave(body))
         case 'exchange': {
           await rt.load()
           const pair = new Set([body.a, body.b])

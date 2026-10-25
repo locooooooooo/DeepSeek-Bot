@@ -64,6 +64,7 @@ export function teamActions({ call, after, partFor, roster, ui, live, cards, hel
     deleteBot: id => after(call('delete-bot', { id })),
     duplicateBot: id => after(call('duplicate-bot', { id })),
     setPrefs: prefs => after(call('set-prefs', prefs)),
+    saveTts: patch => after(call('tts-save', patch)),
     setMain: (id, main = true, options = {}) => after(call('set-main', { id, main, ...options })),
     updateRoom: (id, patch) => after(call('update-room', { id, ...patch })),
     continueRoom: roomId => after(call('room-continue', { roomId })),

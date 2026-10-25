@@ -56,6 +56,8 @@ export function CloudDownloadIcon({ done = false }) {
 }
 export const SmileIcon = lineIcon(['M10 3.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13z', 'M7.3 11.6a3.4 3.4 0 0 0 5.4 0', 'M7.75 8.25h.01M12.25 8.25h.01'])
 export const ReplyIcon = lineIcon(['M8 5L4 9l4 4', 'M4 9h7.5a4.5 4.5 0 0 1 4.5 4.5V15'])
+// A speaker with sound arcs: the Listen button beside a Bot's message.
+export const SpeakerIcon = lineIcon(['M4.5 8h2L10 4.75v10.5L6.5 12h-2z', 'M12.5 8a3.2 3.2 0 0 1 0 4', 'M14.6 6a6.2 6.2 0 0 1 0 8'])
 export const DotsIcon = lineIcon(['M5 10h.01M10 10h.01M15 10h.01'])
 export const CheckIcon = lineIcon(['M4.5 10.5l3.5 3.5 7.5-8'])
 export const ArrowDownIcon = lineIcon(['M10 4v12', 'M5 11l5 5 5-5'])

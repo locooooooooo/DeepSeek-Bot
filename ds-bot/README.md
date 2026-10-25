@@ -138,6 +138,14 @@ Each result starts with a `Search backend: …` line that names the path it took
 
 Another plugin can also set the search provider while dsh runs, after the profile patch. When you turn such a plugin off, check this setting again.
 
+## Listen
+
+Every Bot message carries a Listen button in its hover toolbar. It sends the message's text (Markdown stripped, code blocks dropped) to the host, which synthesizes it with [MiniMax T2A v2](https://platform.minimax.io/docs/api-reference/speech-t2a-http) and returns one mp3 the browser plays. One clip plays at a time.
+
+Setup lives in Settings → **Voice**: turn it on, paste the MiniMax API key (it is stored as the secret `MINIMAX_TTS_KEY` and never leaves the host), and pick the model, the Group ID when your region needs one, a default voice and speaking speed. Each Bot can have a voice of its own; any voice ID from the provider can be typed in. Synthesized clips are cached under the team's data folder (`tts-audio/`, at most 300 files, oldest dropped first), so hearing a message again does not bill the key. Messages over 10,000 characters are refused rather than split. The `tts` endpoints are not served by a read-only host.
+
+The module is `src/host/tts.js`, independent of the Bot team code; see [docs/plans/2026-10-25-tts-listen.md](../docs/plans/2026-10-25-tts-listen.md) for the design.
+
 ## Bot browser
 
 In dsh Desktop and the desktop app, a Bot's chat header has a globe button. It opens that Bot's own browser panel.

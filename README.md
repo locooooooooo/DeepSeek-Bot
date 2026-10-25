@@ -90,6 +90,10 @@ A group chat has its own memory. What you tell the group stays in the group: its
 
 Settings → **Capabilities** is a shared library of MCP servers, skills and packs. Add a capability to a Bot in its settings; it is available from that Bot's next message in its own chat and group chats. A local MCP command that a Bot adds needs your approval before it can run. While other Bots use a capability, only you or a Main Bot can change or delete it.
 
+### Listen
+
+Every Bot message has a Listen button beside it: it reads that message aloud, in that Bot's own voice. Speech comes from MiniMax text-to-speech with your own API key (Settings → **Voice**); each Bot can have its own voice, or use the team's default. Heard clips are cached, so listening again is free.
+
 ### Usage
 
 In **Settings** → **Usage**, you can see token usage by time, by bot and by model.

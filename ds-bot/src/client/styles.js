@@ -596,6 +596,13 @@ body[data-bt-layout=flat] .bt-tools::after{display:none}
 .bt-tool:hover,.bt-tool[aria-expanded=true]{background:var(--bt-hover);color:var(--bt-ink)}
 .bt-tool:active{background:var(--bt-active)}
 .bt-tool:focus-visible{outline:2px solid var(--bt-accent);outline-offset:-2px}
+/* The Listen button's answer while it works, or its refusal: one short line beside
+   the tools, in reach of the bubble it speaks for. */
+.bt-tool-note{max-width:240px;padding:2px 6px;border-radius:6px;background:var(--bt-card);border:.5px solid var(--bt-line-2);color:var(--bt-ink-2);font-size:12px;line-height:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;align-self:center}
+/* A voice choice and, when Custom is picked, the voice ID beside it. */
+.bt-voice-pick{display:flex;align-items:center;gap:6px}
+.bt-voice-id{max-width:220px}
+.bt-voice-pick .bt-select{min-width:140px}
 .bt-react-strip{position:fixed;z-index:60;pointer-events:auto;display:flex;gap:2px;padding:4px;border-radius:999px;background:var(--bt-main);border:.5px solid var(--bt-line-2);box-shadow:0 10px 20px -3px rgba(0,0,0,.08),0 4px 6px -4px rgba(0,0,0,.06);transform:translate(-50%,-100%);transform-origin:bottom center;animation:bt-pop-lift ${SPRING_TAP.duration}ms ${SPRING_TAP.easing},bt-veil-in .14s ease-out}
 .bt-react-strip button{width:32px;height:32px;border:0;border-radius:50%;background:none;font-size:18px;line-height:1;cursor:pointer;transition:background-color .12s ease,${spring(SPRING_POP, 'transform')};animation:bt-check-pop ${SPRING_POP.duration}ms ${SPRING_POP.easing} backwards}
 .bt-react-strip button:nth-child(2){animation-delay:20ms}
