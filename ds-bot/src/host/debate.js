@@ -507,6 +507,10 @@ export function install(rt) {
   const NUDGE_COOLDOWN_MS = 3 * 60_000
   let nudgedAt = 0
   const seenUnread = new Map()
+  // When any member works or anything waits to be read the show is moving; a match
+  // that stays fully quiet this long is stalled however it got there, so the host
+  // gets asked to check its progress and re-dispatch what is missing.
+  let lastMovingAt = Date.now()
   async function autoNudge() {
     const debate = state.debate
     if (debate?.version !== 2 || starting) return null
@@ -521,10 +525,11 @@ export function install(rt) {
       const last = entry.lastAt ?? entry.since ?? Date.now()
       if (Date.now() - last >= STALE_MS) { stuck = { id, cancelSessionId: sessionId, forMinutes: Math.round((Date.now() - last) / 60_000), why: 'went silent' }; break }
     }
+    const unreadOfMember = new Map()
     if (stuck === null) {
       // Across all members at once: an exchange one member's empty inbox would
       // otherwise strike from the map while another still holds it.
-      const unreadOfMember = new Map(debate.memberIds.map(id => [id, (rt.unreadOf?.(rt.chatOf(id)) ?? []).map(item => item?.exchangeId).filter(Boolean)]))
+      for (const id of debate.memberIds) unreadOfMember.set(id, (rt.unreadOf?.(rt.chatOf(id)) ?? []).map(item => item?.exchangeId).filter(Boolean))
       const anyUnread = new Set([...unreadOfMember.values()].flat())
       for (const exchangeId of anyUnread) if (!seenUnread.has(exchangeId)) seenUnread.set(exchangeId, Date.now())
       for (const [exchangeId, at] of seenUnread) {
@@ -536,11 +541,24 @@ export function install(rt) {
         }
       }
     }
+    const moving = stuck !== null
+      || debate.memberIds.some(id => rt.live?.get(rt.chatOf(id))?.turn !== undefined)
+      || [...unreadOfMember.values()].some(list => list.length > 0)
+    if (moving) lastMovingAt = Date.now()
+    if (stuck === null && Date.now() - lastMovingAt >= IDLE_MS) {
+      const hostId = debate.memberIds.includes(debate.hostId)
+        ? debate.hostId
+        : debate.memberIds.find(id => rt.botOf(id)?.role === '控场') ?? debate.memberIds[0]
+      stuck = { id: hostId, cancelSessionId: undefined, forMinutes: Math.round((Date.now() - lastMovingAt) / 60_000), why: 'went quiet all over' }
+    }
     if (stuck === null) return null
     nudgedAt = Date.now()
     const name = rt.botOf(stuck.id)?.name ?? 'A member'
-    rt.noteFailure?.({ source: 'debate', text: `${name}'s turn ${stuck.why} for ${stuck.forMinutes} min; ${stuck.cancelSessionId === undefined ? 'woke the host to carry on' : 'cut it and asked the host to carry on'}` })
-    return { ...(await carryOn(stuck.cancelSessionId, name).catch(error => ({ error: error?.message ?? String(error) }))), stuck }
+    const note = stuck.why === 'went silent'
+      ? `${name}'s turn went silent for ${stuck.forMinutes} min; cut it and asked the host to carry on`
+      : `${name}: ${stuck.why} for ${stuck.forMinutes} min; woke the host to carry on`
+    rt.noteFailure?.({ source: 'debate', text: note })
+    return { ...(await carryOn(stuck.cancelSessionId, stuck.why === 'went silent' ? name : undefined).catch(error => ({ error: error?.message ?? String(error) }))), stuck }
   }
   const watch = setInterval(() => { void autoNudge().catch(() => {}) }, 60_000)
   watch.unref?.()

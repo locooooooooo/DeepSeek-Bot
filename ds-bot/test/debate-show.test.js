@@ -179,8 +179,26 @@ test('the watchdog wakes the host when a delivery never reaches a turn', async (
   assert.equal(nudged.cut, false)
   assert.deepEqual(rt.cancels, [])
   assert.equal(nudged.stuck.id, 'host')
-  assert.match(rt.prompts.at(-1).content[0].text, /主持人/)
+  assert.match(rt.prompts.at(-1).content[0].text, /【催场】/)
   assert.match(rt.notes[0].text, /never reached a turn/)
+})
+
+test('the watchdog asks the host to check when the whole show goes quiet', async (t) => {
+  const rt = makeRt()
+  rt.notes = []
+  rt.noteFailure = note => { rt.notes.push(note) }
+  rt.unreadOf = () => []
+  const saved = await rt.debateEndpoint('save', { template: { name: '安静', rules: '辩题：安静', personas: [] } })
+  await rt.debateEndpoint('start', { templateId: saved.templates.find(template => template.name === '安静').id })
+  assert.equal(await rt.debateAutoNudge(), null)
+  t.mock.timers.enable({ now: Date.now() })
+  t.mock.timers.tick(4 * 60_000)
+  const nudged = await rt.debateAutoNudge()
+  assert.equal(nudged.stuck.id, 'host')
+  assert.equal(nudged.stuck.why, 'went quiet all over')
+  assert.deepEqual(rt.cancels, [])
+  assert.match(rt.prompts.at(-1).content[0].text, /【催场】/)
+  assert.match(rt.notes[0].text, /went quiet all over/)
 })
 
 test('a nudge cuts a hung host turn and asks it to carry on', async () => {
