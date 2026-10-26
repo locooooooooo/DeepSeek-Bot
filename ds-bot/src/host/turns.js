@@ -360,6 +360,9 @@ export function install(rt) {
       return
     }
     const entry = liveOf(id)
+    // A running turn that stops emitting events is one a dropped model connection
+    // left hanging; `lastAt` is how the debate show tells those from slow ones.
+    if (entry.turn !== undefined) entry.lastAt = Date.now()
     if (rt.groupOwners.has(id)) rt.touchRoomTurn?.(id)
     switch (event.type) {
       case 'tool/call': {

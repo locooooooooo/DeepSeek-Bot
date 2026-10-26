@@ -138,6 +138,32 @@ test('a card the roster rejects becomes a warning, not a broken match', async ()
   assert.equal(rt.state.rooms['room-1'].name, '辩论赛直播间（第1场·已结束）')
 })
 
+test('the watchdog cuts a silent turn during an unfinished match', async () => {
+  const rt = makeRt()
+  rt.notes = []
+  rt.noteFailure = note => { rt.notes.push(note) }
+  const saved = await rt.debateEndpoint('save', { template: { name: '测试', rules: '辩题：测试\n流程', personas: [] } })
+  const started = await rt.debateEndpoint('start', { templateId: saved.templates.find(template => template.name === '测试').id })
+  assert.equal(started.canStart, false)
+
+  // A live entry without a running turn is an idle session, not a busy show.
+  rt.live.set('host', { turn: undefined, texts: [] })
+  const withIdle = await rt.debateEndpoint('view', {})
+  assert.equal(withIdle.busy, false)
+
+  assert.equal(await rt.debateAutoNudge(), null)
+  rt.live.set('con', { turn: 4, lastAt: Date.now() - 6 * 60_000, texts: [] })
+  const nudged = await rt.debateAutoNudge()
+  assert.equal(nudged.cut, true)
+  assert.equal(nudged.stuck.id, 'con')
+  assert.deepEqual(rt.cancels, [{ sessionId: 'con' }])
+  assert.match(rt.prompts.at(-1).content[0].text, /反方辩手/)
+  assert.equal(rt.notes.length, 1)
+  // The cooldown holds a second cut back, whatever the map says.
+  rt.live.set('host', { turn: 5, lastAt: Date.now() - 9 * 60_000, texts: [] })
+  assert.equal(await rt.debateAutoNudge(), null)
+})
+
 test('a nudge cuts a hung host turn and asks it to carry on', async () => {
   const rt = makeRt()
   await rt.debateEndpoint('view', {})

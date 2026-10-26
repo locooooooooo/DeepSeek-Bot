@@ -205,7 +205,7 @@ export function install(rt) {
     }))
     const active = templates.find(template => template.id === debate.activeTemplateId) ?? null
     const result = room === undefined ? '' : resultOf(room)
-    const busy = Object.keys(state.works ?? {}).length > 0 || (rt.live?.size ?? 0) > 0
+    const busy = Object.keys(state.works ?? {}).length > 0 || running()
     return {
       configured: true,
       matchNumber: debate.matchNumber,
@@ -301,9 +301,33 @@ export function install(rt) {
     return { ...(await view()), warnings }
   }
 
+  const running = () => [...(rt.live?.values() ?? [])].some(entry => entry?.turn !== undefined)
+
   // The show runs as a chain of turns, and a dropped model connection can leave one
   // hanging without ever ending - the chain then waits forever. A nudge cuts the
-  // host's stuck turn, if any, and asks it to carry on from where the record stops.
+  // stuck turn, if any, and asks the host to carry on from where the record stops.
+  async function carryOn(targetSessionId, stuckName) {
+    const debate = await ensureDebate()
+    if (debate === null) throw new Error('No debate group found')
+    const memberIds = debate.memberIds.filter(id => rt.botOf(id) !== undefined)
+    const hostId = memberIds.includes(debate.hostId)
+      ? debate.hostId
+      : memberIds.find(id => rt.botOf(id)?.role === '控场') ?? memberIds[0]
+    if (hostId === undefined) throw new Error('No debate group found')
+    let cut = false
+    if (targetSessionId !== undefined && rt.live?.get(targetSessionId)?.turn !== undefined) {
+      try {
+        await ctx.sessionController.cancel({ sessionId: targetSessionId })
+        cut = true
+      } catch {
+        // The turn may have ended by itself; the queued message still goes out.
+      }
+    }
+    const who = stuckName === undefined ? '' : `（${stuckName} 的回复若没有交回，先把给它的调度指令重发一次）`
+    await sendToBot(hostId, `【催场】请检查本场进度并继续主持：若上一次派活的回复没有交回（可能因为模型故障），就按群里的公共记录把那条调度指令重发一次，从停住的位置继续；不要重开流程，不要跳过阶段。${who}`)
+    return { ...(await view()), cut }
+  }
+
   async function nudge() {
     const debate = await ensureDebate()
     if (debate === null) throw new Error('No debate group found')
@@ -312,18 +336,7 @@ export function install(rt) {
       ? debate.hostId
       : memberIds.find(id => rt.botOf(id)?.role === '控场') ?? memberIds[0]
     if (hostId === undefined) throw new Error('No debate group found')
-    const sessionId = rt.chatOf(hostId)
-    let cut = false
-    if (rt.live?.get(sessionId)?.turn !== undefined) {
-      try {
-        await ctx.sessionController.cancel({ sessionId })
-        cut = true
-      } catch {
-        // The turn may have ended by itself; the queued message still goes out.
-      }
-    }
-    await sendToBot(hostId, '【催场】请检查本场进度并继续主持：若上一次派活的回复没有交回（可能因为模型故障），就按群里的公共记录把那条调度指令重发一次，从停住的位置继续；不要重开流程，不要跳过阶段。')
-    return { ...(await view()), cut }
+    return carryOn(rt.chatOf(hostId))
   }
 
   async function sendToBot(botId, text) {
@@ -361,7 +374,7 @@ export function install(rt) {
     if (debate === null) throw new Error('No debate group found')
     const room = rt.roomOf(debate.roomId)
     if (room === undefined) throw new Error('The debate group is gone')
-    if (Object.keys(state.works ?? {}).length > 0 || (rt.live?.size ?? 0) > 0) throw new Error('The current match is still running')
+    if (Object.keys(state.works ?? {}).length > 0 || running()) throw new Error('The current match is still running')
     const result = resultOf(room)
     if (result === '') throw new Error('The current match has no S9 result yet')
     const template = (debate.templates ?? []).find(candidate => candidate.id === templateId)
@@ -481,6 +494,36 @@ export function install(rt) {
     return { written, warnings }
   }
 
+  // Turns that stop emitting events are how a dropped model connection shows up
+  // here; every event of a running turn refreshes `lastAt` (turns.js). Once a
+  // member's turn has been silent past STALE_MS during an unfinished match, the
+  // watchdog cuts it and tells the host to carry on, so a reconnect no longer ends
+  // the show. The cooldown keeps a genuinely long turn from being cut twice.
+  const STALE_MS = 5 * 60_000
+  const NUDGE_COOLDOWN_MS = 3 * 60_000
+  let nudgedAt = 0
+  async function autoNudge() {
+    const debate = state.debate
+    if (debate?.version !== 2 || starting) return null
+    if (Date.now() - nudgedAt < NUDGE_COOLDOWN_MS) return null
+    const room = rt.roomOf(debate.roomId)
+    if (room === undefined || resultOf(room) !== '') return null
+    let stuck = null
+    for (const id of debate.memberIds) {
+      const entry = rt.live?.get(rt.chatOf(id))
+      if (entry?.turn === undefined) continue
+      const last = entry.lastAt ?? entry.since ?? Date.now()
+      if (Date.now() - last >= STALE_MS) { stuck = { id, sessionId: rt.chatOf(id), forMinutes: Math.round((Date.now() - last) / 60_000) }; break }
+    }
+    if (stuck === null) return null
+    nudgedAt = Date.now()
+    const name = rt.botOf(stuck.id)?.name ?? 'A member'
+    rt.noteFailure?.({ source: 'debate', text: `${name}'s turn went silent for ${stuck.forMinutes} min; cut it and asked the host to carry on` })
+    return { ...(await carryOn(stuck.sessionId, name).catch(error => ({ error: error?.message ?? String(error) }))), stuck }
+  }
+  const watch = setInterval(() => { void autoNudge().catch(() => {}) }, 60_000)
+  watch.unref?.()
+
   async function endpoint(action, body = {}) {
     await rt.load()
     if (action === 'view') return view()
@@ -493,5 +536,5 @@ export function install(rt) {
     throw new Error(`Unknown debate action ${action}`)
   }
 
-  Object.assign(rt, { debateEndpoint: endpoint })
+  Object.assign(rt, { debateEndpoint: endpoint, debateAutoNudge: autoNudge })
 }
