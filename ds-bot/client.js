@@ -442,13 +442,25 @@ var ZH = {
   "Click again to start": "再点一次开始",
   "The current match is still running.": "当前这场还在进行。",
   "Finish the current match (S9) before starting the next one.": "当前这场跑完 S9 后才能开下一场。",
-  "Archives this match, writes its result into every Bot's memory, and starts the next one.": "归档本场、把结果写进每个 Bot 的记忆，然后开启下一场。",
+  "Archives this match, applies the picked template, and starts the next one.": "归档本场、套用所选模板，然后开启下一场。",
   Rules: "规则",
-  "Save rules": "保存规则",
-  "Rules saved": "规则已保存",
-  Personas: "人设",
-  "Save persona": "保存人设",
-  "Persona saved": "人设已保存",
+  "Topic templates": "辩题库",
+  "New template": "新建辩题",
+  Current: "当前",
+  "Template name": "模板名",
+  "Save template": "保存模板",
+  "Template saved": "模板已保存",
+  "Template deleted": "模板已删除",
+  "Save and apply": "保存并应用",
+  "Applied to the team": "已应用于队员",
+  "Applied to the team, with {count} warnings": "已应用于队员，有 {count} 条警告",
+  "Pick a template for the next match.": "为下一场选择一套辩题。",
+  "Create a template first.": "先创建一套辩题。",
+  "No templates yet.": "还没有辩题模板。",
+  "Leave empty to keep this Bot as it is.": "留空则保持该 Bot 现状。",
+  "Kept as is": "保持现状",
+  "Role labels steer the show flow.": "角色标签驱动赛制（控场 / 正方 / 反方 / 评委 / 核查 / 气氛）。",
+  Role: "角色",
   Member: "成员",
   "{name} instructions": "{name} 的说明书",
   History: "历届战绩",
@@ -15528,23 +15540,31 @@ function VoicePage({ roster, actions, run: run2, Section, Row: Row3 }) {
 // src/client/debate.js
 var import_react38 = require("react");
 var when3 = (ms) => ms ? new Date(ms).toLocaleString() : "";
+var templateCopy = (template) => ({
+  id: template.id,
+  name: template.name,
+  rules: template.rules ?? "",
+  personas: (template.personas ?? []).map((persona) => ({ ...persona }))
+});
 function DebatePage({ actions, run: run2 }) {
   const [view, setView] = (0, import_react38.useState)(null);
   const [error, setError] = (0, import_react38.useState)("");
   const [busy, setBusy] = (0, import_react38.useState)(false);
   const [confirm, setConfirm] = (0, import_react38.useState)(false);
-  const [rules, setRules] = (0, import_react38.useState)("");
-  const [drafts, setDrafts] = (0, import_react38.useState)({});
+  const [picked, setPicked] = (0, import_react38.useState)("");
+  const [draft, setDraft] = (0, import_react38.useState)(null);
+  const [deleting, setDeleting] = (0, import_react38.useState)("");
   const [note, setNote] = (0, import_react38.useState)("");
-  const apply2 = (next) => {
+  const refresh = (next) => {
     setView(next);
-    setRules(next.rules ?? "");
-    setDrafts(Object.fromEntries((next.personas ?? []).map((persona) => [persona.id, persona.instructions])));
+    if (!(next.templates ?? []).some((template) => template.id === picked)) {
+      setPicked(next.activeTemplateId ?? next.templates?.[0]?.id ?? "");
+    }
   };
   (0, import_react38.useEffect)(() => {
     let stopped = false;
     void actions.debate("view").then((next) => {
-      if (!stopped) apply2(next);
+      if (!stopped) refresh(next);
     }).catch((failure) => {
       if (!stopped) setError(failure?.message ?? String(failure));
     });
@@ -15557,15 +15577,50 @@ function DebatePage({ actions, run: run2 }) {
     const timer = setTimeout(() => setConfirm(false), 4e3);
     return () => clearTimeout(timer);
   }, [confirm]);
-  const saveRules = () => run2(actions.debate("save", { rules }).then((next) => {
-    apply2(next);
-    setNote(t("Rules saved"));
+  (0, import_react38.useEffect)(() => {
+    if (deleting === "") return void 0;
+    const timer = setTimeout(() => setDeleting(""), 4e3);
+    return () => clearTimeout(timer);
+  }, [deleting]);
+  const saveDraft = () => run2(actions.debate("save", { template: draft }).then((next) => {
+    refresh(next);
+    setDraft(null);
+    setNote(t("Template saved"));
   }));
-  const savePersona = (id) => run2(actions.debate("save", { personas: [{ id, instructions: drafts[id] ?? "" }] }).then((next) => {
-    apply2(next);
-    setNote(t("Persona saved"));
+  const applyDraft = () => run2(actions.debate("save", { template: draft }).then(
+    (saved) => actions.debate("apply", { id: saved.templates.find((template) => template.name === draft.name.trim()).id })
+  ).then((next) => {
+    refresh(next);
+    setDraft(null);
+    const warnings = next.warnings ?? [];
+    setNote(warnings.length === 0 ? t("Applied to the team") : t("Applied to the team, with {count} warnings", { count: warnings.length }));
   }));
+  const removeTemplate = (id) => {
+    if (deleting !== id) {
+      setDeleting(id);
+      return;
+    }
+    setDeleting("");
+    run2(actions.debate("delete", { id }).then((next) => {
+      refresh(next);
+      setDraft(null);
+      setNote(t("Template deleted"));
+    }));
+  };
+  const newTemplate = () => setDraft({
+    id: "",
+    isNew: true,
+    name: "",
+    rules: "",
+    personas: (view.personas ?? []).map((persona) => ({ ...persona }))
+  });
+  const duplicate = (template) => setDraft({ ...templateCopy(template), isNew: true, name: `${template.name}·${t("Copy")}` });
   const start = async () => {
+    const templateId = picked || view.templates[0]?.id;
+    if (templateId === void 0 || templateId === "") {
+      setError(t("Create a template first."));
+      return;
+    }
     if (!confirm) {
       setConfirm(true);
       return;
@@ -15575,8 +15630,8 @@ function DebatePage({ actions, run: run2 }) {
     setError("");
     setNote("");
     try {
-      const next = await actions.debate("start");
-      apply2(next);
+      const next = await actions.debate("start", { templateId });
+      refresh(next);
       const warnings = next.warnings ?? [];
       setNote(warnings.length === 0 ? t("Match started") : t("Match started, with {count} warnings", { count: warnings.length }));
       if (next.room) {
@@ -15601,8 +15656,9 @@ function DebatePage({ actions, run: run2 }) {
       )
     );
   }
+  const templates = view.templates ?? [];
   const nextNumber = view.matchNumber + 1;
-  const hint = view.busy ? t("The current match is still running.") : !view.result ? t("Finish the current match (S9) before starting the next one.") : t("Archives this match, writes its result into every Bot's memory, and starts the next one.");
+  const hint = view.busy ? t("The current match is still running.") : templates.length === 0 ? t("Create a template first.") : !view.result ? t("Finish the current match (S9) before starting the next one.") : t("Archives this match, applies the picked template, and starts the next one.");
   return (0, import_react38.createElement)(
     "div",
     { className: "bt-db" },
@@ -15618,51 +15674,70 @@ function DebatePage({ actions, run: run2 }) {
           "div",
           { className: "bt-db-hero-copy" },
           (0, import_react38.createElement)("span", { className: "bt-db-number" }, t("Match {number}", { number: view.matchNumber })),
+          view.topic ? (0, import_react38.createElement)("span", { className: "bt-db-topic" }, view.topic) : null,
           (0, import_react38.createElement)("span", { className: "bt-set-hint" }, view.room?.name ?? ""),
           view.result ? (0, import_react38.createElement)("p", { className: "bt-db-result" }, view.result) : null
         ),
-        (0, import_react38.createElement)("button", {
-          type: "button",
-          className: "bt-send bt-soft-sm",
-          disabled: busy || !view.canStart,
-          "data-confirm": confirm || void 0,
-          onClick: () => void start()
-        }, busy ? t("Starting…") : confirm ? t("Click again to start") : t("Start match {number}", { number: nextNumber }))
+        (0, import_react38.createElement)(
+          "div",
+          { className: "bt-db-hero-start" },
+          templates.length > 0 ? (0, import_react38.createElement)("select", {
+            className: "bt-select bt-db-pick",
+            value: picked,
+            "aria-label": t("Pick a template for the next match."),
+            onChange: (event) => setPicked(event.target.value)
+          }, templates.map((template) => (0, import_react38.createElement)("option", { key: template.id, value: template.id }, template.name))) : null,
+          (0, import_react38.createElement)("button", {
+            type: "button",
+            className: "bt-send bt-soft-sm",
+            disabled: busy || !view.canStart,
+            "data-confirm": confirm || void 0,
+            onClick: () => void start()
+          }, busy ? t("Starting…") : confirm ? t("Click again to start") : t("Start match {number}", { number: nextNumber }))
+        )
       ),
       (0, import_react38.createElement)("p", { className: "bt-set-hint" }, hint)
     ),
     (0, import_react38.createElement)(
       Card,
-      { title: t("Rules") },
-      (0, import_react38.createElement)("textarea", {
-        className: "bt-bs-input bt-db-text",
-        rows: 8,
-        value: rules,
-        "aria-label": t("Rules"),
-        onChange: (event) => setRules(event.target.value)
-      }),
-      (0, import_react38.createElement)("div", { className: "bt-db-foot" }, (0, import_react38.createElement)("button", { type: "button", className: "bt-soft bt-soft-sm", onClick: () => void saveRules() }, t("Save rules")))
-    ),
-    (0, import_react38.createElement)(
-      Card,
-      { title: t("Personas") },
-      (view.personas ?? []).map((persona) => (0, import_react38.createElement)(
-        "details",
-        { key: persona.id, className: "bt-db-persona" },
+      { title: t("Topic templates") },
+      (0, import_react38.createElement)(
+        "div",
+        { className: "bt-db-foot bt-db-foot-left" },
+        (0, import_react38.createElement)("button", { type: "button", className: "bt-soft bt-soft-sm", onClick: newTemplate }, t("New template"))
+      ),
+      draft?.isNew ? (0, import_react38.createElement)(TemplateEditor, {
+        draft,
+        setDraft,
+        onSave: saveDraft,
+        onApply: applyDraft,
+        onCancel: () => setDraft(null)
+      }) : null,
+      templates.length === 0 && !draft?.isNew ? (0, import_react38.createElement)("p", { className: "bt-set-hint" }, t("No templates yet.")) : null,
+      templates.map((template) => (0, import_react38.createElement)(
+        "div",
+        { key: template.id, className: "bt-db-tpl" },
         (0, import_react38.createElement)(
-          "summary",
-          null,
-          (0, import_react38.createElement)("span", { className: "bt-row-title" }, persona.name),
-          (0, import_react38.createElement)("span", { className: "bt-tag" }, persona.role || t("Member"))
+          "button",
+          {
+            type: "button",
+            className: "bt-db-tpl-row",
+            onClick: () => setDraft((current) => current !== null && !current.isNew && current.id === template.id ? null : templateCopy(template))
+          },
+          (0, import_react38.createElement)("span", { className: "bt-row-title" }, template.name),
+          template.id === view.activeTemplateId ? (0, import_react38.createElement)("span", { className: "bt-tag" }, t("Current")) : null,
+          (0, import_react38.createElement)("span", { className: "bt-set-hint" }, when3(template.updatedAt)),
+          (0, import_react38.createElement)("span", { className: "bt-chevron" }, (0, import_react38.createElement)(ChevronRightIcon))
         ),
-        (0, import_react38.createElement)("textarea", {
-          className: "bt-bs-input bt-db-text",
-          rows: 10,
-          value: drafts[persona.id] ?? "",
-          "aria-label": t("{name} instructions", { name: persona.name }),
-          onChange: (event) => setDrafts((current) => ({ ...current, [persona.id]: event.target.value }))
-        }),
-        (0, import_react38.createElement)("div", { className: "bt-db-foot" }, (0, import_react38.createElement)("button", { type: "button", className: "bt-soft bt-soft-sm", onClick: () => void savePersona(persona.id) }, t("Save persona")))
+        !draft?.isNew && draft?.id === template.id ? (0, import_react38.createElement)(TemplateEditor, {
+          draft,
+          setDraft,
+          onSave: saveDraft,
+          onApply: applyDraft,
+          onDuplicate: () => duplicate(template),
+          onDelete: () => removeTemplate(template.id),
+          deleting: deleting === template.id
+        }) : null
       ))
     ),
     (0, import_react38.createElement)(
@@ -15675,6 +15750,7 @@ function DebatePage({ actions, run: run2 }) {
           "div",
           { className: "bt-db-history-copy" },
           (0, import_react38.createElement)("span", { className: "bt-row-title" }, t("Match {number}", { number: match.number })),
+          match.topic ? (0, import_react38.createElement)("span", { className: "bt-set-hint" }, match.topic) : null,
           (0, import_react38.createElement)("span", { className: "bt-set-hint" }, when3(match.endedAt)),
           match.result ? (0, import_react38.createElement)("p", { className: "bt-db-result" }, match.result) : null
         ),
@@ -15687,6 +15763,92 @@ function DebatePage({ actions, run: run2 }) {
     )
   );
 }
+function TemplateEditor({ draft, setDraft, onSave, onApply, onCancel, onDelete, onDuplicate, deleting }) {
+  const setField = (patch) => setDraft((current) => ({ ...current, ...patch }));
+  const setPersona = (id, patch) => setDraft((current) => ({
+    ...current,
+    personas: current.personas.map((persona) => persona.id === id ? { ...persona, ...patch } : persona)
+  }));
+  return (0, import_react38.createElement)(
+    "div",
+    { className: "bt-db-edit" },
+    (0, import_react38.createElement)("input", {
+      className: "bt-input bt-db-name",
+      value: draft.name,
+      maxLength: 40,
+      placeholder: t("Template name"),
+      "aria-label": t("Template name"),
+      onChange: (event) => setField({ name: event.target.value })
+    }),
+    (0, import_react38.createElement)("textarea", {
+      className: "bt-bs-input bt-db-text",
+      rows: 8,
+      value: draft.rules,
+      "aria-label": t("Rules"),
+      placeholder: t("Rules"),
+      onChange: (event) => setField({ rules: event.target.value })
+    }),
+    (0, import_react38.createElement)("p", { className: "bt-set-hint" }, t("Role labels steer the show flow.")),
+    (draft.personas ?? []).map((persona) => (0, import_react38.createElement)(
+      "details",
+      { key: persona.id, className: "bt-db-persona" },
+      (0, import_react38.createElement)(
+        "summary",
+        null,
+        (0, import_react38.createElement)("span", { className: "bt-row-title" }, persona.name || persona.id),
+        (0, import_react38.createElement)("span", { className: "bt-tag" }, persona.role || t("Member")),
+        persona.instructions === "" ? (0, import_react38.createElement)("span", { className: "bt-set-hint" }, t("Kept as is")) : null
+      ),
+      (0, import_react38.createElement)(
+        "div",
+        { className: "bt-db-card" },
+        (0, import_react38.createElement)("input", {
+          className: "bt-input",
+          value: persona.name,
+          maxLength: 40,
+          placeholder: t("Name"),
+          "aria-label": t("Name"),
+          onChange: (event) => setPersona(persona.id, { name: event.target.value })
+        }),
+        (0, import_react38.createElement)("input", {
+          className: "bt-input",
+          value: persona.role,
+          maxLength: 24,
+          placeholder: t("Role"),
+          "aria-label": t("Role"),
+          onChange: (event) => setPersona(persona.id, { role: event.target.value })
+        }),
+        (0, import_react38.createElement)("textarea", {
+          className: "bt-bs-input bt-db-text",
+          rows: 10,
+          value: persona.instructions,
+          "aria-label": t("{name} instructions", { name: persona.name || persona.id }),
+          placeholder: t("Leave empty to keep this Bot as it is."),
+          onChange: (event) => setPersona(persona.id, { instructions: event.target.value })
+        })
+      )
+    )),
+    (0, import_react38.createElement)(
+      "div",
+      { className: "bt-db-foot" },
+      onDelete ? (0, import_react38.createElement)("button", {
+        type: "button",
+        className: "bt-soft bt-soft-sm",
+        "data-confirm": deleting || void 0,
+        onClick: onDelete
+      }, deleting ? t("Click again to delete.") : t("Delete")) : null,
+      onDuplicate ? (0, import_react38.createElement)("button", { type: "button", className: "bt-soft bt-soft-sm", onClick: onDuplicate }, t("Duplicate")) : null,
+      onCancel ? (0, import_react38.createElement)("button", { type: "button", className: "bt-soft bt-soft-sm", onClick: onCancel }, t("Cancel")) : null,
+      (0, import_react38.createElement)("button", { type: "button", className: "bt-soft bt-soft-sm", disabled: draft.name.trim() === "", onClick: onApply }, t("Save and apply")),
+      (0, import_react38.createElement)("button", {
+        type: "button",
+        className: "bt-send bt-soft-sm",
+        disabled: draft.name.trim() === "",
+        onClick: onSave
+      }, t("Save template"))
+    )
+  );
+}
 var DEBATE_CSS = `
 .bt-db{display:flex;flex-direction:column;gap:12px;width:100%;min-width:0}
 .bt-db .bt-set-card{width:100%;box-sizing:border-box;min-width:0;padding:12px;gap:10px}
@@ -15695,8 +15857,11 @@ var DEBATE_CSS = `
 .bt-db-note{color:var(--bt-ink-2)}
 .bt-db-hero{display:flex;align-items:flex-start;gap:16px;justify-content:space-between;flex-wrap:wrap}
 .bt-db-hero-copy{display:flex;flex-direction:column;gap:4px;min-width:0;flex:1 1 320px}
+.bt-db-hero-start{display:flex;align-items:center;gap:8px;flex:none;flex-wrap:wrap}
 .bt-db-hero>.bt-send{flex:none}
 .bt-db-number{font-size:18px;font-weight:600;color:var(--bt-ink)}
+.bt-db-topic{color:var(--bt-ink-2);font-size:13px}
+.bt-db-pick{width:auto;min-width:160px;max-width:50%;flex:0 1 auto}
 .bt-db-result{margin:6px 0 0;color:var(--bt-ink-2);font-size:13px;line-height:1.5;white-space:pre-wrap;max-height:96px;overflow:auto}
 .bt-db-text{
   flex:0 0 auto;width:100%;height:auto;min-height:180px;box-sizing:border-box;
@@ -15706,15 +15871,22 @@ var DEBATE_CSS = `
 }
 .bt-db-text:hover,.bt-db-text:focus{background:var(--bt-main);text-align:left;border-color:var(--bt-line-2)}
 .bt-db-text::placeholder{color:var(--bt-ink-3)}
-.bt-db-foot{display:flex;justify-content:flex-end}
+.bt-db-foot{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:8px}
+.bt-db-foot-left{justify-content:flex-start}
+.bt-db-tpl{padding:8px 0;border-top:.5px solid var(--bt-line)}
+.bt-db-tpl-row{display:flex;align-items:center;gap:8px;width:100%;padding:6px 0;border:0;background:none;font:inherit;color:inherit;text-align:left;cursor:pointer}
+.bt-db-tpl-row .bt-row-title{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bt-db-edit{display:flex;flex-direction:column;gap:10px;padding:8px 0}
+.bt-db-edit .bt-db-text{min-height:120px}
+.bt-db-card{display:flex;flex-direction:column;gap:8px;margin-top:8px}
 .bt-db-persona{padding:10px 0;border-top:.5px solid var(--bt-line)}
-.bt-db-persona:first-of-type{border-top:0;padding-top:0}
+.bt-db-edit .bt-db-persona:first-of-type{border-top:0;padding-top:0}
 .bt-db-persona summary{display:flex;align-items:center;gap:8px;cursor:pointer;list-style:none}
 .bt-db-persona summary::-webkit-details-marker{display:none}
 .bt-db-persona summary .bt-row-title{flex:1}
 .bt-db-persona .bt-db-text{margin-top:8px;min-height:160px}
 .bt-db-history{display:flex;align-items:flex-start;gap:12px;justify-content:space-between;padding:10px 0;border-top:.5px solid var(--bt-line)}
-.bt-db-history:first-of-type{border-top:0;padding-top:0}
+.bt-db-history:first-of-type{border-top:0}
 .bt-db-history-copy{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1}
 .bt-db-history .bt-db-result{max-height:72px}
 `;
