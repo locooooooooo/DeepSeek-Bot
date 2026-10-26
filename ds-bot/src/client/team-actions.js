@@ -91,7 +91,7 @@ export function teamActions({ call, after, partFor, roster, ui, live, cards, hel
     schedules: () => call('schedules'),
     scheduleCreate: task => call('schedule-create', task),
     scheduleDelete: (sessionId, id) => call('schedule-delete', { sessionId, id }),
-    debate: (action, payload = {}) => call('debate', { action, ...payload }),
+    debate: (action, payload = {}) => after(call('debate', { action, ...payload })),
     exchange: (a, b) => call('exchange', { a, b }).catch(() => []),
     exchangeText: id => call('exchange-text', { id }).catch(() => undefined),
     fileText: file => call('file-text', { file }).catch(() => undefined),

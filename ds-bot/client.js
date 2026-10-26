@@ -1670,7 +1670,7 @@ function teamActions({ call: call2, after, partFor, roster, ui: ui2, live, cards
     schedules: () => call2("schedules"),
     scheduleCreate: (task) => call2("schedule-create", task),
     scheduleDelete: (sessionId, id) => call2("schedule-delete", { sessionId, id }),
-    debate: (action, payload = {}) => call2("debate", { action, ...payload }),
+    debate: (action, payload = {}) => after(call2("debate", { action, ...payload })),
     exchange: (a, b) => call2("exchange", { a, b }).catch(() => []),
     exchangeText: (id) => call2("exchange-text", { id }).catch(() => void 0),
     fileText: (file) => call2("file-text", { file }).catch(() => void 0),
@@ -15636,7 +15636,10 @@ function DebatePage({ actions, run: run2 }) {
       setNote(warnings.length === 0 ? t("Match started") : t("Match started, with {count} warnings", { count: warnings.length }));
       if (next.room) {
         actions.closeSettings?.();
-        actions.openSession?.(next.room.id);
+        try {
+          actions.openSession?.(next.room.id);
+        } catch {
+        }
       }
     } catch (failure) {
       setError(failure?.message ?? String(failure));

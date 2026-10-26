@@ -103,7 +103,12 @@ export function DebatePage({ actions, run }) {
       setNote(warnings.length === 0 ? t('Match started') : t('Match started, with {count} warnings', { count: warnings.length }))
       if (next.room) {
         actions.closeSettings?.()
-        actions.openSession?.(next.room.id)
+        try {
+          actions.openSession?.(next.room.id)
+        } catch {
+          // The roster pull that followed the request lists the new group; the
+          // chat list still leads there if this navigation lands too early.
+        }
       }
     } catch (failure) {
       setError(failure?.message ?? String(failure))
