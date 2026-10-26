@@ -164,6 +164,25 @@ test('the watchdog cuts a silent turn during an unfinished match', async () => {
   assert.equal(await rt.debateAutoNudge(), null)
 })
 
+test('the watchdog wakes the host when a delivery never reaches a turn', async (t) => {
+  const rt = makeRt()
+  rt.notes = []
+  rt.noteFailure = note => { rt.notes.push(note) }
+  const saved = await rt.debateEndpoint('save', { template: { name: '孤儿', rules: '辩题：孤儿\n流程', personas: [] } })
+  await rt.debateEndpoint('start', { templateId: saved.templates.find(template => template.name === '孤儿').id })
+  // A judge's reply sits unread on the idle host; no turn is running anywhere.
+  rt.unreadOf = sessionId => (sessionId === 'host' ? [{ exchangeId: 'ex-1' }] : [])
+  assert.equal(await rt.debateAutoNudge(), null)
+  t.mock.timers.enable({ now: Date.now() })
+  t.mock.timers.tick(4 * 60_000)
+  const nudged = await rt.debateAutoNudge()
+  assert.equal(nudged.cut, false)
+  assert.deepEqual(rt.cancels, [])
+  assert.equal(nudged.stuck.id, 'host')
+  assert.match(rt.prompts.at(-1).content[0].text, /主持人/)
+  assert.match(rt.notes[0].text, /never reached a turn/)
+})
+
 test('a nudge cuts a hung host turn and asks it to carry on', async () => {
   const rt = makeRt()
   await rt.debateEndpoint('view', {})

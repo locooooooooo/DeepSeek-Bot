@@ -499,9 +499,14 @@ export function install(rt) {
   // member's turn has been silent past STALE_MS during an unfinished match, the
   // watchdog cuts it and tells the host to carry on, so a reconnect no longer ends
   // the show. The cooldown keeps a genuinely long turn from being cut twice.
+  // A delivery can also land on an idle Session and never be taken up by any turn
+  // (unreadOf); past IDLE_MS that is an orphaned message, and a fresh prompt wakes
+  // the Session with the inbox still aboard.
   const STALE_MS = 5 * 60_000
+  const IDLE_MS = 3 * 60_000
   const NUDGE_COOLDOWN_MS = 3 * 60_000
   let nudgedAt = 0
+  const seenUnread = new Map()
   async function autoNudge() {
     const debate = state.debate
     if (debate?.version !== 2 || starting) return null
@@ -510,16 +515,32 @@ export function install(rt) {
     if (room === undefined || resultOf(room) !== '') return null
     let stuck = null
     for (const id of debate.memberIds) {
-      const entry = rt.live?.get(rt.chatOf(id))
-      if (entry?.turn === undefined) continue
+      const sessionId = rt.chatOf(id)
+      if (rt.live?.get(sessionId)?.turn === undefined) continue
+      const entry = rt.live.get(sessionId)
       const last = entry.lastAt ?? entry.since ?? Date.now()
-      if (Date.now() - last >= STALE_MS) { stuck = { id, sessionId: rt.chatOf(id), forMinutes: Math.round((Date.now() - last) / 60_000) }; break }
+      if (Date.now() - last >= STALE_MS) { stuck = { id, cancelSessionId: sessionId, forMinutes: Math.round((Date.now() - last) / 60_000), why: 'went silent' }; break }
+    }
+    if (stuck === null) {
+      // Across all members at once: an exchange one member's empty inbox would
+      // otherwise strike from the map while another still holds it.
+      const unreadOfMember = new Map(debate.memberIds.map(id => [id, (rt.unreadOf?.(rt.chatOf(id)) ?? []).map(item => item?.exchangeId).filter(Boolean)]))
+      const anyUnread = new Set([...unreadOfMember.values()].flat())
+      for (const exchangeId of anyUnread) if (!seenUnread.has(exchangeId)) seenUnread.set(exchangeId, Date.now())
+      for (const [exchangeId, at] of seenUnread) {
+        if (!anyUnread.has(exchangeId)) { seenUnread.delete(exchangeId); continue }
+        const holder = debate.memberIds.find(id => (unreadOfMember.get(id) ?? []).includes(exchangeId) && rt.live?.get(rt.chatOf(id))?.turn === undefined)
+        if (holder !== undefined && Date.now() - at >= IDLE_MS) {
+          stuck = { id: holder, cancelSessionId: undefined, forMinutes: Math.round((Date.now() - at) / 60_000), why: 'never reached a turn' }
+          break
+        }
+      }
     }
     if (stuck === null) return null
     nudgedAt = Date.now()
     const name = rt.botOf(stuck.id)?.name ?? 'A member'
-    rt.noteFailure?.({ source: 'debate', text: `${name}'s turn went silent for ${stuck.forMinutes} min; cut it and asked the host to carry on` })
-    return { ...(await carryOn(stuck.sessionId, name).catch(error => ({ error: error?.message ?? String(error) }))), stuck }
+    rt.noteFailure?.({ source: 'debate', text: `${name}'s turn ${stuck.why} for ${stuck.forMinutes} min; ${stuck.cancelSessionId === undefined ? 'woke the host to carry on' : 'cut it and asked the host to carry on'}` })
+    return { ...(await carryOn(stuck.cancelSessionId, name).catch(error => ({ error: error?.message ?? String(error) }))), stuck }
   }
   const watch = setInterval(() => { void autoNudge().catch(() => {}) }, 60_000)
   watch.unref?.()
