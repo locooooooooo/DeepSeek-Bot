@@ -301,6 +301,31 @@ export function install(rt) {
     return { ...(await view()), warnings }
   }
 
+  // The show runs as a chain of turns, and a dropped model connection can leave one
+  // hanging without ever ending - the chain then waits forever. A nudge cuts the
+  // host's stuck turn, if any, and asks it to carry on from where the record stops.
+  async function nudge() {
+    const debate = await ensureDebate()
+    if (debate === null) throw new Error('No debate group found')
+    const memberIds = debate.memberIds.filter(id => rt.botOf(id) !== undefined)
+    const hostId = memberIds.includes(debate.hostId)
+      ? debate.hostId
+      : memberIds.find(id => rt.botOf(id)?.role === '控场') ?? memberIds[0]
+    if (hostId === undefined) throw new Error('No debate group found')
+    const sessionId = rt.chatOf(hostId)
+    let cut = false
+    if (rt.live?.get(sessionId)?.turn !== undefined) {
+      try {
+        await ctx.sessionController.cancel({ sessionId })
+        cut = true
+      } catch {
+        // The turn may have ended by itself; the queued message still goes out.
+      }
+    }
+    await sendToBot(hostId, '【催场】请检查本场进度并继续主持：若上一次派活的回复没有交回（可能因为模型故障），就按群里的公共记录把那条调度指令重发一次，从停住的位置继续；不要重开流程，不要跳过阶段。')
+    return { ...(await view()), cut }
+  }
+
   async function sendToBot(botId, text) {
     const sessionId = rt.chatOf(botId)
     await rt.ensureCapabilities?.(sessionId)
@@ -462,6 +487,7 @@ export function install(rt) {
     if (action === 'save') return save(body)
     if (action === 'delete') return remove(body)
     if (action === 'apply') return applyToMembers(body)
+    if (action === 'nudge') return nudge()
     if (action === 'start') return start(body.templateId)
     if (action === 'remember') return remember(body)
     throw new Error(`Unknown debate action ${action}`)

@@ -26,8 +26,12 @@ const makeRt = () => {
   const rt = {
     state: { bots, rooms, works: {}, debate: null },
     prompts: [],
+    cancels: [],
     memory: [],
-    ctx: { sessionController: { prompt: async (request) => { rt.prompts.push(request) } } },
+    ctx: { sessionController: {
+      prompt: async (request) => { rt.prompts.push(request) },
+      cancel: async (request) => { rt.cancels.push(request) },
+    } },
     live: new Map(),
     botOf: id => rt.state.bots[id],
     roomOf: id => rt.state.rooms[id],
@@ -132,6 +136,22 @@ test('a card the roster rejects becomes a warning, not a broken match', async ()
   assert.match(started.warnings[0], /主持人/)
   assert.equal(rt.state.bots.host.name, '主持人')
   assert.equal(rt.state.rooms['room-1'].name, '辩论赛直播间（第1场·已结束）')
+})
+
+test('a nudge cuts a hung host turn and asks it to carry on', async () => {
+  const rt = makeRt()
+  await rt.debateEndpoint('view', {})
+  const idle = await rt.debateEndpoint('nudge', {})
+  assert.equal(idle.cut, false)
+  assert.deepEqual(rt.cancels, [])
+  assert.match(rt.prompts.at(-1).content[0].text, /【催场】/)
+
+  rt.live.set('host', { turn: 7, texts: [] })
+  const cut = await rt.debateEndpoint('nudge', {})
+  assert.equal(cut.cut, true)
+  assert.deepEqual(rt.cancels, [{ sessionId: 'host' }])
+  assert.match(rt.prompts.at(-1).content[0].text, /从停住的位置继续/)
+  rt.live.delete('host')
 })
 
 test('the endpoints refuse what they cannot do', async () => {

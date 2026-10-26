@@ -468,6 +468,10 @@ var ZH = {
   "Archived matches stay readable in their group chats.": "归档的比赛仍可在对应群聊里查看。",
   "Match started": "比赛已开始",
   "Match started, with {count} warnings": "比赛已开始，有 {count} 条警告",
+  "Nudge the host": "催场",
+  "Click again to nudge": "再点一次催场",
+  "Stuck turn cut; the host was asked to carry on.": "已打断卡住的回合，并让主持人继续。",
+  "The host was asked to carry on.": "已提醒主持人继续。",
   "Create a group chat named {name} with the debate Bots, then open this page again.": "先建一个名为「{name}」的群，加入辩论赛的 Bot，再打开这个页面。",
   Secrets: "密钥",
   Appearance: "外观",
@@ -15551,6 +15555,7 @@ function DebatePage({ actions, run: run2 }) {
   const [error, setError] = (0, import_react38.useState)("");
   const [busy, setBusy] = (0, import_react38.useState)(false);
   const [confirm, setConfirm] = (0, import_react38.useState)(false);
+  const [nudging, setNudging] = (0, import_react38.useState)(false);
   const [picked, setPicked] = (0, import_react38.useState)("");
   const [draft, setDraft] = (0, import_react38.useState)(null);
   const [deleting, setDeleting] = (0, import_react38.useState)("");
@@ -15577,6 +15582,22 @@ function DebatePage({ actions, run: run2 }) {
     const timer = setTimeout(() => setConfirm(false), 4e3);
     return () => clearTimeout(timer);
   }, [confirm]);
+  (0, import_react38.useEffect)(() => {
+    if (!nudging) return void 0;
+    const timer = setTimeout(() => setNudging(false), 4e3);
+    return () => clearTimeout(timer);
+  }, [nudging]);
+  const nudgeHost = () => {
+    if (!nudging) {
+      setNudging(true);
+      return;
+    }
+    setNudging(false);
+    run2(actions.debate("nudge").then((next) => {
+      refresh(next);
+      setNote(next.cut === true ? t("Stuck turn cut; the host was asked to carry on.") : t("The host was asked to carry on."));
+    }));
+  };
   (0, import_react38.useEffect)(() => {
     if (deleting === "") return void 0;
     const timer = setTimeout(() => setDeleting(""), 4e3);
@@ -15684,6 +15705,12 @@ function DebatePage({ actions, run: run2 }) {
         (0, import_react38.createElement)(
           "div",
           { className: "bt-db-hero-start" },
+          (0, import_react38.createElement)("button", {
+            type: "button",
+            className: "bt-soft bt-soft-sm",
+            "data-confirm": nudging || void 0,
+            onClick: nudgeHost
+          }, nudging ? t("Click again to nudge") : t("Nudge the host")),
           templates.length > 0 ? (0, import_react38.createElement)("select", {
             className: "bt-select bt-db-pick",
             value: picked,

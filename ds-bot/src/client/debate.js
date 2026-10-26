@@ -21,6 +21,7 @@ export function DebatePage({ actions, run }) {
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [confirm, setConfirm] = useState(false)
+  const [nudging, setNudging] = useState(false)
   const [picked, setPicked] = useState('')
   const [draft, setDraft] = useState(null)
   const [deleting, setDeleting] = useState('')
@@ -44,6 +45,23 @@ export function DebatePage({ actions, run }) {
     const timer = setTimeout(() => setConfirm(false), 4000)
     return () => clearTimeout(timer)
   }, [confirm])
+
+  useEffect(() => {
+    if (!nudging) return undefined
+    const timer = setTimeout(() => setNudging(false), 4000)
+    return () => clearTimeout(timer)
+  }, [nudging])
+
+  // A dropped model connection can leave the host's turn hanging and the whole
+  // show with it; a nudge cuts the stuck turn and asks the host to carry on.
+  const nudgeHost = () => {
+    if (!nudging) { setNudging(true); return }
+    setNudging(false)
+    run(actions.debate('nudge').then((next) => {
+      refresh(next)
+      setNote(next.cut === true ? t('Stuck turn cut; the host was asked to carry on.') : t('The host was asked to carry on.'))
+    }))
+  }
 
   useEffect(() => {
     if (deleting === '') return undefined
@@ -142,6 +160,9 @@ export function DebatePage({ actions, run }) {
           h('span', { className: 'bt-set-hint' }, view.room?.name ?? ''),
           view.result ? h('p', { className: 'bt-db-result' }, view.result) : null),
         h('div', { className: 'bt-db-hero-start' },
+          h('button', {
+            type: 'button', className: 'bt-soft bt-soft-sm', 'data-confirm': nudging || undefined, onClick: nudgeHost,
+          }, nudging ? t('Click again to nudge') : t('Nudge the host')),
           templates.length > 0 ? h('select', {
             className: 'bt-select bt-db-pick', value: picked, 'aria-label': t('Pick a template for the next match.'),
             onChange: event => setPicked(event.target.value),
