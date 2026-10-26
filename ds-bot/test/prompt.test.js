@@ -37,6 +37,18 @@ test('Bots get a scoped progress rule without changing the private/group prompt 
   assert.equal(prompt('group-worker'), prompt('worker'))
 })
 
+test('every Bot gets the writing rules once; the relay does not', (t) => {
+  const { ctx, prompt } = start()
+  t.after(() => ctx.dispose())
+  for (const id of ['main', 'worker']) {
+    assert.ok(prompt(id).includes('## How you write'))
+    assert.ok(prompt(id).includes('对系统进行测试'))
+    assert.equal(prompt(id).split('## How you write').length - 1, 1)
+  }
+  assert.equal(prompt('group-worker'), prompt('worker'))
+  assert.equal(prompt('room').includes('## How you write'), false)
+})
+
 test('the group relay and non-Bot sessions do not get progress instructions', (t) => {
   const { ctx, prompt } = start()
   t.after(() => ctx.dispose())
