@@ -211,7 +211,7 @@ export function install(rt) {
       matchNumber: debate.matchNumber,
       startedAt: debate.startedAt,
       room: room === undefined ? null : { id: room.id, name: room.name },
-      topic: (debate.matches ?? []).at(-1)?.topic ?? active?.name ?? '',
+      topic: active?.name ?? (debate.matches ?? []).at(-1)?.topic ?? '',
       activeTemplateId: debate.activeTemplateId ?? null,
       hostId: debate.hostId,
       adminId: debate.adminId,
@@ -343,6 +343,9 @@ export function install(rt) {
     if (template === undefined) throw new Error('Pick a template for the next match')
 
     const warnings = await applyTemplate(debate, template)
+    // The finished match ran on the template that was active until now; the picked
+    // template only names the match that is about to start.
+    const finishedTopic = (debate.templates ?? []).find(candidate => candidate.id === debate.activeTemplateId)?.name ?? ''
     const number = debate.matchNumber
     const oldName = room.name
     const archivedName = `${DEBATE_ROOM}（第${number}场·已结束）`
@@ -372,7 +375,7 @@ export function install(rt) {
       for (const id of memberIds) {
         const bot = rt.botOf(id)
         if (bot === undefined) continue
-        const text = memoryLine({ matchNumber: number, result, role: bot.role, roomName: archivedName, topic: template.name })
+        const text = memoryLine({ matchNumber: number, result, role: bot.role, roomName: archivedName, topic: finishedTopic })
         try {
           await rt.memoryAdd({ botId: id, text, topic: 'debate' })
         } catch (error) {
@@ -394,7 +397,7 @@ export function install(rt) {
       name: archivedName,
       endedAt: Date.now(),
       result: truncate(result, 600),
-      topic: template.name,
+      topic: finishedTopic,
     }]
     await rt.save()
 

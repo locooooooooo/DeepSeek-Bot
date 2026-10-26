@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { install } from '../src/host/debate.js'
+import { DEFAULT_RULES, install, nameFromRules } from '../src/host/debate.js'
 
 // The debate endpoint over a minimal fake rt: enough of the roster, room and memory
 // surface for view → save → start to run for real, with prompts recorded.
@@ -104,11 +104,13 @@ test('save, then start applies the template, archives and remembers', async () =
   assert.equal(rt.state.bots.pro.instructions, 'new pro card')
   assert.equal(rt.state.bots.con.instructions, 'old con card')
   assert.ok(rt.memory.length === 3)
-  for (const entry of rt.memory) assert.match(entry.text, /《薄荷绿丝袜》/)
+  // The archived match is recorded under the template that ran it, not the next one.
+  const finishedName = nameFromRules(DEFAULT_RULES)
+  for (const entry of rt.memory) assert.match(entry.text, new RegExp(`《${finishedName.slice(0, 6)}`))
   assert.equal(rt.state.debate.version, 2)
   assert.equal(rt.state.debate.matchNumber, 2)
   assert.equal(rt.state.debate.activeTemplateId, templateId)
-  assert.equal(rt.state.debate.matches.at(-1).topic, '薄荷绿丝袜')
+  assert.equal(rt.state.debate.matches.at(-1).topic, finishedName)
   assert.equal(started.topic, '薄荷绿丝袜')
   assert.equal(started.canStart, false)
   const kickoff = rt.prompts.at(-1).content[0].text
