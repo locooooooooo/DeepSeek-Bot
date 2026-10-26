@@ -51,6 +51,48 @@ const sideButton = (node) => {
   return null
 }
 
+const nodesOf = (node, out = []) => {
+  if (node === null || typeof node !== 'object') return out
+  out.push(node)
+  for (const child of node.children ?? []) nodesOf(child, out)
+  return out
+}
+
+const roomHeader = () => {
+  const roster = {
+    byId: {},
+    roomsById: { r1: { id: 'r1', name: 'Debate room', members: [], named: true } },
+    bots: [],
+    exchangeTurns: {},
+    questions: {},
+    prefs: {},
+    tts: { enabled: true, keySet: true },
+  }
+  return HeaderPill({
+    sessionId: 'r1',
+    useRoster: hook(roster),
+    useSessions: hook({ byId: {} }),
+    useSessionStatus: hook(new Map()),
+    useSession: hook({}),
+    useActivity: hook({}),
+    useMemoryNews: hook({}),
+    useTurnClock: hook({}),
+    useUi: hook({}),
+    useLive: hook({}),
+    actions: { beginVisit() {}, endVisit() {}, toggleDetails() {} },
+  })
+}
+
+// A group chat can listen to every new Bot message, so its header carries the
+// speaker switch; a Bot's own chat keeps only per-message Listen.
+test('the group header carries the listening switch and a Bot header does not', () => {
+  const control = nodesOf(roomHeader()).find(node => typeof node.type === 'function' && node.type.name === 'BroadcastControl')
+  const toggle = nodesOf(control.type(control.props)).find(node => String(node.props?.className ?? '').includes('bt-listen-toggle'))
+  assert.equal(toggle?.props['aria-label'], 'Listen to new messages')
+  const botToggle = nodesOf(header({})).find(node => typeof node.type === 'function' && node.type.name === 'BroadcastControl')
+  assert.equal(botToggle, undefined)
+})
+
 // 公开#456: the Bot header carries no right-sidebar toggle — the drawer and the
 // column never share the window, and the way in sits in the drawer instead.
 test('the Bot header has no right sidebar button', () => {

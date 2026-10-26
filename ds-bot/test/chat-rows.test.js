@@ -26,7 +26,7 @@ runInNewContext(bundle.outputFiles[0].text, {
     return platform[name]
   },
 })
-const { ChatRows, ThinkingRow } = module.exports
+const { ChatRows, ThinkingRow, stackReplies } = module.exports
 
 const roster = { byId: { b: { id: 'b', name: 'Writer' } }, roomsById: {} }
 const MINUTE = 60_000
@@ -103,4 +103,13 @@ test('a settled reasoning row shows the turn’s thinking time when known', () =
   assert.equal(time?.children.join(''), '· 12s')
   const untimed = ThinkingRow({ text: 'one\ntwo' })
   assert.equal(untimed.children[0].children.join(''), 'Thought it through')
+})
+
+test('a stacked reply keeps each message’s own time for listening', () => {
+  const items = stackReplies([
+    { botId: 'b', text: 'one', time: 1 },
+    { botId: 'b', text: 'two', time: 2 },
+    { botId: 'a', text: 'three', time: 3 },
+  ])
+  assert.equal(items.map(item => `${item.texts.join('+')}@${item.times.join(',')}`).join('|'), 'one+two@1,2|three@3')
 })

@@ -95,6 +95,12 @@ export const stripHeader = text => text.replace(HEADER, '')
 // synthesis and the Listen button's text-to-speech request.
 export const speakableText = text => stripHeader(text).replace(/```[\s\S]*?```/g, ' ').replace(/\[([^\]]*)\]\([^)]*\)/g, '$1').replace(/[*_`#>|~-]+/g, ' ').replace(/\s+/g, ' ').trim()
 
+// A debate speech opens with its stage and speaker and may ask for a review at
+// the end. Neither is part of what the speaker said; a plain 【note】 stays.
+const STAGE_TAG = /^\s*【[^】\n]{1,24}[-－—][^】\n]{1,24}】\s*/
+const REVIEW_TAG = /【申请核查[^】]*】/g
+export const speakableSpeech = text => speakableText(String(text ?? '').replace(STAGE_TAG, '').replace(REVIEW_TAG, ' '))
+
 // Of the Bots in a conversation, the one whose memory changed last, by the host's
 // clock: changes reaching one window in the same poll share a `seen` time.
 export function latestMemoryChange(news, ids) {

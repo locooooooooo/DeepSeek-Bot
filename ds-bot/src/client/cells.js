@@ -2,8 +2,9 @@ import { createElement as h, Fragment, useEffect, useLayoutEffect, useMemo, useR
 import { createPortal } from 'react-dom'
 import { MarkdownText } from './dsh-primitives.js'
 import { inkText } from './inks.js'
-import { linkMentions, mentionTarget, dayLabel, contentText, stripHeader, speakableText, isHiddenTurn, isRelayContext, relaysBefore, relayPart, commRunOf, toolName, toolArgs, reminderPrompts, elapsedLabel, clockLabel, messageClock } from './text.js'
+import { linkMentions, mentionTarget, dayLabel, contentText, stripHeader, isHiddenTurn, isRelayContext, relaysBefore, relayPart, commRunOf, toolName, toolArgs, reminderPrompts, elapsedLabel, clockLabel, messageClock } from './text.js'
 import { SmileIcon, ReplyIcon, DotsIcon, CheckIcon, DownloadIcon, CopyIcon, MemoryIcon, SpeakerIcon } from './icons.js'
+import { listening, useAutoSpeech, useManualSpeech } from './listen.js'
 import { colorOf, toolState, BotMark, RoomAvatar } from './mark.js'
 import { SettledQuestion, PendingQuestion } from './questions.js'
 import { AnsweredReply, WidgetCell } from './widget-cell.js'
@@ -30,7 +31,7 @@ const mdLabels = () => ({ code: { copyLabel: t('Copy'), copiedLabel: t('Copied')
 // row, so it lines up with the bubble whether or not reactions hang below it.
 // `fold`: past what a bubble folds (fold.js); `whole`: the last text is only the start
 // of its message (see useFold).
-export function Bubbles({ texts, roster, selfId, actions, streaming, sessionId, msgKey, useUi, lead, mentions, fold = FOLD_AT, whole }) {
+export function Bubbles({ texts, roster, selfId, actions, streaming, sessionId, msgKey, roomId, speakTimes, useUi, lead, mentions, fold = FOLD_AT, whole }) {
   const onClick = (event) => {
     const target = mentionTarget(event)
     if (target === null) return
@@ -43,7 +44,7 @@ export function Bubbles({ texts, roster, selfId, actions, streaming, sessionId, 
     texts.map((text, index) => {
       const last = index === texts.length - 1
       return h(Bubble, {
-        key: index, text, index, roster, selfId, actions, sessionId, msgKey, mentions, fold,
+        key: index, text, index, roster, selfId, actions, sessionId, msgKey, roomId, speakTime: speakTimes?.[index], mentions, fold,
         picked: msgKey ? reactions?.[index] ?? [] : [],
         live: streaming && last,
         lead: lead && last ? lead : null,
@@ -52,7 +53,7 @@ export function Bubbles({ texts, roster, selfId, actions, streaming, sessionId, 
     }))
 }
 
-function Bubble({ text, index, roster, selfId, actions, sessionId, msgKey, mentions, fold, picked, live, lead, whole }) {
+function Bubble({ text, index, roster, selfId, actions, sessionId, msgKey, roomId, speakTime, mentions, fold, picked, live, lead, whole }) {
   const { shown, folded, control } = useFold(text, { limit: fold, whole, live })
   const key = msgKey ? `${msgKey}:${index}` : undefined
   const body = h(MarkdownText, { text: linkMentions(shown, roster.bots, selfId), streaming: live, labels: mdLabels(), variant: 'compact', fileMentions: mentions })
@@ -61,6 +62,7 @@ function Bubble({ text, index, roster, selfId, actions, sessionId, msgKey, menti
   // closes them. Interactive targets keep their own meaning.
   const [toolsOpen, setToolsOpen] = useState(false)
   useDismiss(toolsOpen, () => setToolsOpen(false), [row])
+  useAutoSpeech({ roomId, key, text, botId: selfId, time: speakTime, live })
   const tapTools = (event) => {
     if (!noHover() || event.target instanceof Element && event.target.closest('a,button,input,textarea,select,pre,code,[role=button],[role=link]')) return
     setToolsOpen(value => !value)
@@ -71,7 +73,7 @@ function Bubble({ text, index, roster, selfId, actions, sessionId, msgKey, menti
       h('div', { className: 'bt-bubble', 'data-folded': folded || undefined },
         control ? h('div', { className: 'bt-fold-body' }, body) : body,
         control),
-      live ? null : h(MessageTools, { text: folded ? text : shown, name: roster.byId[selfId]?.name ?? t('Bot'), sessionId, botId: selfId, react: key ? emoji => actions.toggleReaction(msgKey, index, emoji) : undefined, actions, open: toolsOpen })),
+      live ? null : h(MessageTools, { text: folded ? text : shown, speechText: text, name: roster.byId[selfId]?.name ?? t('Bot'), sessionId, botId: selfId, speechKey: key, react: key ? emoji => actions.toggleReaction(msgKey, index, emoji) : undefined, actions, open: toolsOpen })),
     picked.length ? h('div', { className: 'bt-reacts' }, picked.map(emoji => h('button', {
       key: emoji, type: 'button', className: 'bt-react', 'aria-label': t('Remove reaction {emoji}', { emoji }), onClick: () => actions.toggleReaction(msgKey, index, emoji),
     }, emoji))) : null)
@@ -98,33 +100,28 @@ function useDismiss(open, close, refs) {
   }, [open])
 }
 
-// One clip plays at a time: starting a Listen stops the one before it.
-let speakingClip = null
-const stopSpeaking = () => {
-  if (speakingClip === null) return
-  speakingClip.pause()
-  speakingClip = null
-}
-
 // The hover toolbar beside a reply bubble: Add reaction, Reply, Listen, More. `open` is
 // the touch fallback: a tap on the bubble toggles it (see Bubble).
-function MessageTools({ text, name, sessionId, botId, react, actions, open: tapped }) {
+let manualKey = 0
+function MessageTools({ text, speechText, name, sessionId, botId, speechKey, react, actions, open: tapped }) {
   // The anchor element is kept, not its rect: the visible viewport can move
   // (on-screen keyboard) while the popover is open.
   const [panel, setPanel] = useState(null)
   const [copied, setCopied] = useState(false)
-  const [speech, setSpeech] = useState(null)
-  const [note, setNote] = useState('')
+  const fallback = useRef('')
+  if (fallback.current === '') fallback.current = `manual:${(manualKey += 1)}`
+  const key = speechKey ?? fallback.current
+  // A reply whose text says nothing a speech service can read still needs its
+  // own stable key, so the button below only lights up for its own clip.
+  const manual = useManualSpeech(key)
+  const split = manual.indexOf(':')
+  const speech = split === -1 ? '' : manual.slice(0, split)
+  const note = split === -1 ? '' : manual.slice(split + 1)
   const tools = useRef(null)
   const pop = useRef(null)
   const tick = useViewport()
   const close = () => setPanel(null)
   useDismiss(panel !== null, close, [tools, pop])
-  useEffect(() => {
-    if (!note) return undefined
-    const timer = setTimeout(() => setNote(''), 3200)
-    return () => clearTimeout(timer)
-  }, [note])
   const open = (kind, event) => { if (panel?.kind === kind) { close(); return } setPanel({ kind, node: event.currentTarget }) }
   const place = useMemo(() => {
     if (!panel) return null
@@ -145,31 +142,15 @@ function MessageTools({ text, name, sessionId, botId, react, actions, open: tapp
     link.click()
     setTimeout(() => URL.revokeObjectURL(url), 1000)
   }
-  const listen = async () => {
-    if (speech === 'playing') { stopSpeaking(); setSpeech(null); return }
+  const listen = () => {
     if (speech === 'loading') return
-    setSpeech('loading')
-    setNote('')
-    try {
-      const value = await call('tts', { text: speakableText(text), botId })
-      const clip = new Audio(`data:${value.mime};base64,${value.audio}`)
-      stopSpeaking()
-      speakingClip = clip
-      clip.onended = () => { if (speakingClip === clip) speakingClip = null; setSpeech(current => (current === 'playing' ? null : current)) }
-      clip.onerror = () => { if (speakingClip === clip) speakingClip = null; setSpeech(null); setNote(t('Could not play this audio.')) }
-      await clip.play()
-      setSpeech('playing')
-    } catch (error) {
-      stopSpeaking()
-      setSpeech(null)
-      setNote(error?.message ?? String(error))
-    }
+    listening.speakManual({ key, text: speechText ?? text, botId })
   }
   const item = (label, Icon, run) => h('button', { key: label, type: 'button', role: 'menuitem', onClick: () => { close(); run() } }, h(Icon), label)
   return h('div', { ref: tools, className: 'bt-tools', 'data-open': panel !== null || tapped || undefined },
     react ? h('button', { type: 'button', className: 'bt-tool', 'aria-label': t('Add reaction'), title: t('Add reaction'), 'aria-expanded': panel?.kind === 'react', onClick: event => open('react', event) }, h(SmileIcon)) : null,
     sessionId ? h('button', { type: 'button', className: 'bt-tool', 'aria-label': t('Reply'), title: t('Reply'), onClick: () => actions.quote(sessionId, text) }, h(ReplyIcon)) : null,
-    h('button', { type: 'button', className: 'bt-tool', 'aria-label': speech === 'playing' ? t('Stop listening') : t('Listen'), title: speech === 'playing' ? t('Stop listening') : t('Listen'), 'aria-pressed': speech === 'playing' || undefined, 'aria-busy': speech === 'loading' || undefined, onClick: () => { void listen() } }, h(SpeakerIcon)),
+    h('button', { type: 'button', className: 'bt-tool', 'aria-label': speech === 'playing' ? t('Stop listening') : t('Listen'), title: speech === 'playing' ? t('Stop listening') : t('Listen'), 'aria-pressed': speech === 'playing' || undefined, 'aria-busy': speech === 'loading' || undefined, onClick: listen }, h(SpeakerIcon)),
     note ? h('span', { className: 'bt-tool-note', role: 'status' }, note) : null,
     h('button', { type: 'button', className: 'bt-tool', 'aria-label': t('More message actions'), title: t('More'), 'aria-haspopup': 'menu', 'aria-expanded': panel?.kind === 'more', onClick: event => open('more', event) }, copied ? h(CheckIcon) : h(DotsIcon)),
     panel?.kind === 'react' ? createPortal(h('div', { ref: pop, className: 'bt-react-strip', role: 'menu', 'aria-label': t('Reactions'), style: place },
@@ -331,17 +312,18 @@ function SpeakerHead({ bot, time }) {
 // One Bot message inside a group chat: avatar, name (with its group role), when it ran
 // and how long it took, bubble. The flat layout moves the avatar from beside the last
 // bubble to the head of the name row, so the text below runs the whole width.
-function GroupMessage({ bot, text, texts = [text], room, roster, actions, msgKey, useUi, whole, time, duration }) {
+function GroupMessage({ bot, text, texts = [text], times, room, roster, actions, msgKey, useUi, whole, time, duration }) {
   const lead = h('button', { type: 'button', className: 'bt-lead', 'aria-label': t("Open {name}'s chat", { name: bot.name }), onClick: () => actions.openSession(bot.id) },
     h(BotMark, { bot, size: 22 }))
   const flat = layoutOf(roster.prefs) === 'flat'
   const took = Number.isFinite(duration) ? elapsedLabel(duration) : undefined
+  const speakTimes = times ?? texts.map(() => time)
   return h('div', { className: 'bt-group-msg' },
     h('span', { className: 'bt-group-name', style: flat ? undefined : { color: inkText(colorOf(bot)) } }, flat ? lead : null, bot.name,
       room?.admin === bot.id ? h('span', { className: 'bt-group-role' }, t('Admin')) : null,
       Number.isFinite(time) ? h('span', { className: 'bt-group-time', title: clockLabel(time) }, messageClock(time)) : null,
       took ? h('span', { className: 'bt-group-took', title: t('Ran for {duration}', { duration: took }) }, took) : null),
-    h(Bubbles, { texts, roster, selfId: bot.id, actions, sessionId: room?.id, msgKey, useUi, lead: flat ? null : lead, whole }))
+    h(Bubbles, { texts, roster, selfId: bot.id, actions, sessionId: room?.id, roomId: room?.id, speakTimes, msgKey, useUi, lead: flat ? null : lead, whole }))
 }
 
 // A member's messages in a row, as one block under its name: what it says while it
@@ -352,9 +334,17 @@ export function stackReplies(replies) {
     const last = items.at(-1)
     if (reply.kind === undefined && last?.reply.kind === undefined && last?.reply.botId === reply.botId) {
       last.texts.push(reply.text)
+      last.times.push(reply.time)
       last.time = reply.time
       last.duration = reply.duration
-    } else items.push({ reply, index, texts: reply.kind === undefined ? [reply.text] : [], time: reply.time, duration: reply.duration })
+    } else items.push({
+      reply,
+      index,
+      texts: reply.kind === undefined ? [reply.text] : [],
+      times: reply.kind === undefined ? [reply.time] : [],
+      time: reply.time,
+      duration: reply.duration,
+    })
   })
   return items
 }
@@ -826,7 +816,7 @@ function GroupReplies({ sessionId, callId, done, content, roster, actions, useUi
   if (replies.length === 0 && pending.length === 0) return null
   const room = roster.roomsById[sessionId]
   return h('div', { className: 'bt-group-replies' },
-    stackReplies(replies).map(({ reply, index, texts, time, duration }) => {
+    stackReplies(replies).map(({ reply, index, texts, times, time, duration }) => {
       const bot = roster.byId[reply.botId] ?? { id: reply.botId, name: reply.name, color: reply.color ?? 'gray' }
       if (reply.kind === 'user') {
         return h('div', { key: `user-${index}`, className: 'bt-urow' }, h('div', { className: 'bt-ububble' },
@@ -866,7 +856,7 @@ function GroupReplies({ sessionId, callId, done, content, roster, actions, useUi
       if (reply.kind === 'done') {
         return h('div', { key: `${reply.botId}-${index}`, className: 'bt-event' }, t('{name} finished its work', { name: bot.name }))
       }
-      return h(GroupMessage, { key: `${reply.botId}-${index}`, bot, texts, room, roster, actions, msgKey: callId ? `${sessionId}:${callId}:${index}` : undefined, useUi, time, duration })
+      return h(GroupMessage, { key: `${reply.botId}-${index}`, bot, texts, times, room, roster, actions, msgKey: callId ? `${sessionId}:${callId}:${index}` : undefined, useUi, time, duration })
     }),
     pending.map((id) => {
       const bot = roster.byId[id]

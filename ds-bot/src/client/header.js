@@ -1,11 +1,12 @@
 import { createElement as h, Fragment, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { currentPart, latestMemoryChange } from './text.js'
-import { ArrowUpIcon, CloseIcon, ArrowDownIcon, MemoryIcon } from './icons.js'
+import { ArrowUpIcon, CloseIcon, ArrowDownIcon, MemoryIcon, SpeakerIcon, ChevronLeftIcon, ChevronRightIcon } from './icons.js'
 import { botState, BotAvatar, RoomAvatar } from './mark.js'
 import { ActivityIndicator } from './activity-row.js'
 import { clockLabel, openingTurn, unseenSince } from './cells.js'
 import { viewBottom } from './motion.js'
+import { listening, useListening } from './listen.js'
 import { t } from './i18n.js'
 
 // -------------------------------------------------------------------------
@@ -105,9 +106,48 @@ export function HeaderPill({ sessionId, useRoster, useSessions, useSessionStatus
     h('span', { className: 'bt-pill-name' }, away ? t('Back to chat') : bot?.name ?? room?.name ?? (title || t('New chat'))),
     h(MemoryNotice, { shown: memoryNotice }),
     h('span', { className: 'bt-pill-go', 'aria-hidden': true }, h(GoArrow))),
+    room ? h(BroadcastControl, { key: room.id, room, roster }) : null,
     h('span', { className: 'bt-sr', role: 'status' }, memoryNotice ? t('Memory updated') : ''),
     h(NewMessagePills, { key: sessionId, sessionId, useSessions, useUi, useTurnClock }),
     h(ActivityIndicator, { key: `activity:${sessionId}`, sessionId, useRoster, useSessionStatus, useSession, useLive, useWork, actions }))
+}
+
+// A group's listening switch: new Bot messages are read aloud in their authors'
+// voices. The bar under the header carries the queue controls.
+function BroadcastControl({ room, roster }) {
+  const live = useListening()
+  const on = live.roomId === room.id
+  const ready = roster.tts?.enabled === true && roster.tts?.keySet === true
+  useEffect(() => () => listening.stopRoom(room.id), [room.id])
+  const toggle = () => {
+    if (on) { listening.disable(); return }
+    if (!ready) { listening.notify(t('Set up text-to-speech in Settings → Voice first.')); return }
+    listening.enable(room.id)
+  }
+  const current = live.current
+  const note = live.note
+  const canPrevious = current !== null || live.played.length > 0
+  const canNext = current !== null || live.queue.length > 0
+  const label = on ? t('Stop listening to new messages') : t('Listen to new messages')
+  return h(Fragment, null,
+    h('button', {
+      type: 'button', className: 'bt-round bt-listen-toggle', 'data-on': on || undefined,
+      'aria-pressed': on, 'aria-label': label,
+      title: on ? label : ready ? t('Reads new messages in this group aloud.') : t('Set up text-to-speech in Settings → Voice.'),
+      onClick: toggle,
+    }, h(SpeakerIcon)),
+    note !== '' && !on ? h('span', { className: 'bt-listen-note bt-listen-head-note', role: 'status' }, note) : null,
+    on ? h('div', { className: 'bt-listen-bar', role: 'group', 'aria-label': t('Listening to new messages') },
+      h('span', { className: 'bt-listen-state' },
+        h('span', { className: 'bt-listen-ico' }, h(SpeakerIcon)),
+        h('span', { className: 'bt-listen-name' }, current === null ? t('Waiting for the next message') : roster.byId[current.botId]?.name ?? t('A Bot')),
+        live.queue.length > 0 ? h('span', { className: 'bt-listen-count' }, t('{count} queued', { count: live.queue.length })) : null),
+      current?.status === 'loading' ? h('span', { className: 'bt-listen-prep' }, t('Preparing…')) : null,
+      note !== '' ? h('span', { className: 'bt-listen-note', role: 'status' }, note) : null,
+      h('span', { className: 'bt-listen-actions' },
+        h('button', { type: 'button', className: 'bt-icon-btn', disabled: !canPrevious, 'aria-label': t('Previous message'), title: t('Previous message'), onClick: () => listening.previous() }, h(ChevronLeftIcon)),
+        h('button', { type: 'button', className: 'bt-icon-btn', disabled: !canNext, 'aria-label': t('Next message'), title: t('Next message'), onClick: () => listening.next() }, h(ChevronRightIcon)),
+        h('button', { type: 'button', className: 'bt-icon-btn', 'aria-label': t('Stop listening'), title: t('Stop listening'), onClick: () => listening.disable() }, h(CloseIcon)))) : null)
 }
 
 // New-message pills. "N new messages ↓" takes Back to bottom's place when

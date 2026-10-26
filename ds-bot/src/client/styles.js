@@ -175,6 +175,25 @@ body[data-bt-motion=quiet] .bt-mark[data-poke]{cursor:default}
 .bt-pill[aria-expanded=true] .bt-pill-go svg{transform:rotate(180deg)}
 .bt-pill[data-memory=updated]:is(:hover,:focus-visible,[aria-expanded=true]) .bt-pill-go{width:0;margin-left:-8px;opacity:0;filter:blur(6px);transform:translateX(-6px)}
 @media (prefers-reduced-motion:reduce){.bt-pill,.bt-pill-go,.bt-pill-go svg{transition:none!important}.bt-pill-go{filter:none}.bt-pill:active{transform:none}}
+.bt-listen-toggle{pointer-events:auto;width:32px;height:32px;margin-left:6px;flex:none;color:var(--bt-ink-2)}
+.bt-listen-toggle:hover{color:var(--bt-ink)}
+.bt-listen-toggle[data-on]{background:var(--bt-accent);border-color:transparent;color:var(--bt-accent-ink)}
+.bt-listen-toggle svg{width:16px;height:16px}
+.bt-listen-bar{position:absolute;top:46px;left:50%;transform:translateX(-50%);z-index:2;display:flex;align-items:center;gap:3px;max-width:calc(100vw - 24px);padding:3px 4px 3px 10px;border-radius:999px;background:var(--bt-card);border:.5px solid var(--bt-line-2);box-shadow:0 6px 20px -8px rgba(0,0,0,.3),0 1px 3px rgba(0,0,0,.08);color:var(--bt-ink);font-family:inherit;font-size:13px;line-height:18px;pointer-events:auto;animation:bt-listen-in ${SPRING_TAP.duration}ms ${SPRING_TAP.easing}}
+@keyframes bt-listen-in{from{opacity:0;translate:0 -6px;scale:.94}}
+.bt-listen-state{display:inline-flex;align-items:center;gap:6px;min-width:0}
+.bt-listen-ico{display:inline-flex;flex:none;color:var(--bt-accent)}
+.bt-listen-ico svg{width:16px;height:16px}
+.bt-listen-name{max-width:150px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:500}
+.bt-listen-count,.bt-listen-prep{flex:none;color:var(--bt-ink-2);font-size:12px;white-space:nowrap}
+.bt-listen-prep{padding-left:4px}
+.bt-listen-note{flex:none;max-width:220px;padding:2px 7px;border-radius:6px;background:var(--bt-hover);color:var(--bt-ink-2);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bt-listen-head-note{position:absolute;top:46px;left:50%;transform:translateX(-50%);z-index:2;pointer-events:none;box-shadow:0 4px 14px rgba(0,0,0,.14)}
+.bt-listen-actions{display:inline-flex;align-items:center;gap:0;flex:none}
+.bt-listen-actions .bt-icon-btn{width:26px;height:26px}
+.bt-listen-actions .bt-icon-btn:disabled{opacity:.35;cursor:default;background:none}
+@media (max-width:560px){.bt-listen-name{max-width:96px}.bt-listen-bar{gap:1px}.bt-listen-prep{display:none}}
+@media (prefers-reduced-motion:reduce){.bt-listen-bar{animation:none}}
 
 /* The width settings: the share of the column a bubble may take, and the flat text. */
 body{--bt-msg-w:.8;--bt-flat-w:1}

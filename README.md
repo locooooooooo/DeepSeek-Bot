@@ -94,6 +94,8 @@ Settings → **Capabilities** is a shared library of MCP servers, skills and pac
 
 Every Bot message has a Listen button beside it: it reads that message aloud, in that Bot's own voice. Speech comes from MiniMax text-to-speech with your own API key (Settings → **Voice**); each Bot can have its own voice, or use the team's default. Heard clips are cached, so listening again is free.
 
+A group chat also has a speaker button in its header. Turn it on and new Bot messages in that group are queued and read in their authors' voices, with a bar for previous, next and stop. A manual Listen takes over and switches the queue off, and leaving the group stops it.
+
 ### Usage
 
 In **Settings** → **Usage**, you can see token usage by time, by bot and by model.
