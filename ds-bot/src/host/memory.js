@@ -252,7 +252,9 @@ const wordsOf = (text) => {
 export function reviewEntries(home, team, budget = REVIEW_MEMORY_MAX, about = '', tag = 'own') {
   const tagged = (files, scope) => files.flatMap(file => file.entries.map(entry => ({ ...entry, file, scope })))
   const main = [...tagged(home.slice(0, 1), tag), ...tagged(team.slice(0, 1), 'team')]
-  const topics = [...tagged(home.slice(1), tag), ...tagged(team.slice(1), 'team')]
+  // The debate show writes each match into this topic itself; the automatic review
+  // must not read it as something to tidy away.
+  const topics = [...tagged(home.slice(1), tag), ...tagged(team.slice(1), 'team')].filter(entry => entry.file.topic !== 'debate')
   let used = main.reduce((sum, entry) => sum + entry.text.length, 0)
   const asked = wordsOf(about)
   const shared = entry => [...wordsOf(`${entry.text} ${entry.file.topic ?? ''}`)].filter(word => asked.has(word)).length
@@ -444,6 +446,7 @@ export function install(rt) {
       archiveBotMemory: async () => {},
       archiveGroupMemory: async () => {},
       memoryEndpoint: async () => { throw new Error('Memory is turned off on this host') },
+      memoryAdd: async () => {},
       memoryNews: () => ({}),
       memoryReviews: () => 0,
     })
@@ -632,6 +635,19 @@ export function install(rt) {
       const where = topic === undefined ? MAIN : fresh ? `the new topic [[${topic}]], linked from MEMORY.md` : `topic [[${topic}]]`
       return { changed: true, file: target, message: `Saved to ${label}, in ${where} (${sizeNote(target, next.length)}).` }
     })
+  }
+
+  // One entry the user's debate show writes for a Bot, through the same rules as
+  // remember: no keys, one fact, the fixed entry size.
+  async function memoryAdd({ botId, text, topic }) {
+    const bot = rt.botOf(botId)
+    if (bot === undefined) throw new Error('Unknown Bot')
+    const entry = cleanEntry(text)
+    const problem = entryProblem(entry)
+    if (problem !== undefined) throw new Error(problem)
+    const { topic: cleanTopicName, error } = topicArg(topic)
+    if (error !== undefined) throw new Error(error)
+    return addEntry({ scope: ownScope(botId), topic: cleanTopicName, text: entry, actor: { id: 'user', name: 'User' }, label: `${bot.name}'s memory` })
   }
 
   // `topic` narrows where to look; undefined looks in every file of the scope.
@@ -1550,7 +1566,7 @@ export function install(rt) {
   }
 
   Object.assign(rt, {
-    memoryEnabled: true, renewMemory, archiveBotMemory, archiveGroupMemory, memoryEndpoint, memoryReviews,
+    memoryEnabled: true, renewMemory, archiveBotMemory, archiveGroupMemory, memoryEndpoint, memoryAdd, memoryReviews,
     memoryNews: () => Object.fromEntries(news),
   })
 }

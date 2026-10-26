@@ -1,0 +1,317 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1800 1180" width="1800" height="1180" role="img" aria-labelledby="title desc">
+  <title id="title">DS Bot 实测辩论写路径与 Rust 数据面</title>
+  <desc id="desc">按 2026-10-25 四场真实辩论重绘：主持人 Session 串行推进 S1 到 S9，用 message_bot 派活；辩手在自己的 Session 生成后用 post_to_group 发到群；群 Session 只做直播 relay。Rust 接手 exchange、room、archive 的追加写和聊天索引，主持人模型串行链留在 JS。</desc>
+
+  <defs>
+    <marker id="a-orange" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#ea580c"/></marker>
+    <marker id="a-indigo" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#6366f1"/></marker>
+    <marker id="a-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#059669"/></marker>
+    <marker id="a-green-dash" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#10b981"/></marker>
+    <marker id="a-amber" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#d97706"/></marker>
+    <marker id="a-amber-dash" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#d97706"/></marker>
+    <marker id="a-gray" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#64748b"/></marker>
+  </defs>
+
+  <style>
+    text { font-family: ui-sans-serif, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; }
+    .title { font-size: 23px; font-weight: 700; fill: #0f172a; }
+    .subtitle { font-size: 12.5px; fill: #64748b; }
+    .panel-title { font-size: 15px; font-weight: 700; fill: #0f172a; }
+    .box-title { font-size: 12px; font-weight: 700; fill: #0f172a; }
+    .box-text { font-size: 10.5px; fill: #475569; }
+    .small { font-size: 9.8px; fill: #475569; }
+    .bullet { font-size: 10.8px; fill: #334155; }
+    .note { font-size: 10px; fill: #64748b; }
+    .legend { font-size: 11.3px; fill: #334155; }
+    .napi-title { font-size: 11px; font-weight: 700; fill: #0f172a; }
+    .napi-sub { font-size: 9.5px; fill: #64748b; }
+    .num { font-size: 10.5px; font-weight: 700; fill: #ffffff; }
+    .client { fill: #fff7ed; stroke: #fdba74; stroke-width: 1.5; }
+    .host { fill: #f8fafc; stroke: #cbd5e1; stroke-width: 1.5; }
+    .dsh { fill: #eef2ff; stroke: #a5b4fc; stroke-width: 1.5; }
+    .js { fill: #eff6ff; stroke: #93c5fd; stroke-width: 1.5; }
+    .flow-panel { fill: #fff7ed; stroke: #fb923c; stroke-width: 1.5; }
+    .rust { fill: #ecfdf5; stroke: #6ee7b7; stroke-width: 1.5; }
+    .storage { fill: #fffbeb; stroke: #fcd34d; stroke-width: 1.5; }
+    .napi { fill: #f1f5f9; stroke: #94a3b8; stroke-width: 1.5; }
+    .sub { fill: #ffffff; stroke: #dbeafe; stroke-width: 1; }
+    .sub-orange { fill: #ffffff; stroke: #fed7aa; stroke-width: 1; }
+    .sub-green { fill: #ffffff; stroke: #d1fae5; stroke-width: 1; }
+    .sub-amber { fill: #ffffff; stroke: #fde68a; stroke-width: 1; }
+    .note-box { fill: none; stroke: #94a3b8; stroke-width: 1; stroke-dasharray: 4 4; }
+    .highlight { fill: #ffedd5; stroke: #ea580c; stroke-width: 1.5; }
+    .flow-client { stroke: #ea580c; stroke-width: 1.6; fill: none; }
+    .flow-dsh { stroke: #6366f1; stroke-width: 1.6; fill: none; }
+    .flow-native { stroke: #059669; stroke-width: 1.6; fill: none; }
+    .flow-native-back { stroke: #10b981; stroke-width: 1.6; fill: none; stroke-dasharray: 5 4; }
+    .flow-storage { stroke: #d97706; stroke-width: 1.6; fill: none; }
+    .flow-storage-back { stroke: #d97706; stroke-width: 1.6; fill: none; stroke-dasharray: 5 4; }
+    .flow-event { stroke: #64748b; stroke-width: 1.6; fill: none; stroke-dasharray: 5 4; }
+    .badge { fill: #0f172a; }
+    .badge-red { fill: #dc2626; }
+    .bottom { fill: #ffffff; stroke: #e2e8f0; stroke-width: 1.2; }
+  </style>
+
+  <rect width="1800" height="1180" fill="#ffffff"/>
+
+  <text x="40" y="42" class="title">DS Bot 实测辩论写路径与 Rust 数据面</text>
+  <text x="40" y="68" class="subtitle">实测：主持人 123 turn / 112 次 message_bot；state 595KB / revision 922；会话日志 9.19MB。Rust 只接手写入、归档和索引。</text>
+
+  <!-- Clients -->
+  <rect x="520" y="96" width="280" height="58" rx="10" class="client"/>
+  <text x="660" y="118" text-anchor="middle" class="box-title">网页窗口（DSH Web）</text>
+  <text x="660" y="138" text-anchor="middle" class="box-text">轮询 / SSE</text>
+  <rect x="840" y="96" width="280" height="58" rx="10" class="client"/>
+  <text x="980" y="118" text-anchor="middle" class="box-title">桌面窗口（Electron）</text>
+  <text x="980" y="138" text-anchor="middle" class="box-text">SSE · revision / room 事件</text>
+  <line x1="660" y1="154" x2="660" y2="206" class="flow-client" marker-end="url(#a-orange)"/>
+  <line x1="980" y1="154" x2="980" y2="206" class="flow-client" marker-end="url(#a-orange)"/>
+  <text x="820" y="186" text-anchor="middle" class="note">HTTP /api/bot · SSE（revision · live · message · stream）</text>
+  <circle cx="625" cy="180" r="10" class="badge"/>
+  <text x="625" y="184" text-anchor="middle" class="num">1</text>
+
+  <!-- Host -->
+  <rect x="40" y="210" width="1720" height="700" rx="16" class="host"/>
+  <text x="60" y="238" class="panel-title">DSH 宿主进程（Node 24 / Electron Node 模式）— 单进程</text>
+  <text x="1740" y="238" text-anchor="end" class="note">state.lock：单写者 · 原生加载失败走 JS 回退</text>
+
+  <!-- DSH runtime -->
+  <rect x="60" y="260" width="230" height="630" rx="12" class="dsh"/>
+  <text x="76" y="286" class="panel-title">DSH 运行时</text>
+  <rect x="76" y="306" width="198" height="64" rx="7" class="sub"/>
+  <text x="92" y="328" class="box-title">Session Controller</text>
+  <text x="92" y="346" class="box-text">page · 日志分页 · seq</text>
+  <text x="92" y="362" class="small">eventsBackwards 的数据源</text>
+  <rect x="76" y="380" width="198" height="64" rx="7" class="sub"/>
+  <text x="92" y="402" class="box-title">Agent 生命周期</text>
+  <text x="92" y="420" class="box-text">resolveAgent · followup</text>
+  <text x="92" y="436" class="small">steer · cancel · inbox</text>
+  <rect x="76" y="454" width="198" height="64" rx="7" class="sub"/>
+  <text x="92" y="476" class="box-title">Session 事件</text>
+  <text x="92" y="494" class="box-text">turn/start · assistant</text>
+  <text x="92" y="510" class="small">turn/end · tool/call · stream</text>
+  <rect x="76" y="528" width="198" height="64" rx="7" class="sub"/>
+  <text x="92" y="550" class="box-title">LLM · 工具 · 审批</text>
+  <text x="92" y="568" class="box-text">模型路由 · 工具执行</text>
+  <text x="92" y="584" class="small">审批 · 沙箱 · 文件</text>
+  <rect x="76" y="602" width="198" height="64" rx="7" class="sub"/>
+  <text x="92" y="624" class="box-title">Workspace / 文件夹</text>
+  <text x="92" y="642" class="box-text">archiveSession · folder</text>
+  <text x="92" y="658" class="small">换段 / 归档的宿主能力</text>
+  <rect x="76" y="676" width="198" height="64" rx="7" class="sub"/>
+  <text x="92" y="698" class="box-title">connection.fetch</text>
+  <text x="92" y="716" class="box-text">HTTP / SSE 路由注册</text>
+  <text x="92" y="732" class="small">/api/bot · /api/bot/feed</text>
+  <rect x="76" y="756" width="198" height="114" rx="7" class="note-box"/>
+  <text x="92" y="780" class="note">插件只用文档化 API；</text>
+  <text x="92" y="798" class="note">不读 DSH 内部文件；</text>
+  <text x="92" y="816" class="note">不 patch DSH。</text>
+  <text x="92" y="842" class="note">模型串行链留在这里，</text>
+  <text x="92" y="860" class="note">Rust 不接管。</text>
+
+  <!-- JS control plane -->
+  <rect x="310" y="260" width="610" height="630" rx="12" class="js"/>
+  <text x="326" y="286" class="panel-title">ds-bot 插件（JS 控制面）</text>
+
+  <rect x="326" y="306" width="578" height="240" rx="8" class="flow-panel"/>
+  <text x="342" y="328" class="box-title">当前辩论流程（实测）</text>
+  <text x="342" y="348" class="small">主持人串行 S1–S9；群是直播输出，不是调度器</text>
+
+  <rect x="342" y="362" width="176" height="76" rx="7" class="sub-orange"/>
+  <text x="356" y="380" class="box-title">主持人 Session</text>
+  <text x="356" y="397" class="small">123 turn / 169 工具</text>
+  <text x="356" y="413" class="small">112 次 message_bot</text>
+  <text x="356" y="429" class="small">按回复推进 S1–S9</text>
+
+  <rect x="530" y="362" width="176" height="76" rx="7" class="sub-orange"/>
+  <text x="544" y="380" class="box-title">辩手 / 评委 Session</text>
+  <text x="544" y="397" class="small">各自生成发言</text>
+  <text x="544" y="413" class="small">post_to_group 36 次</text>
+  <text x="544" y="429" class="small">评委 S9 私聊回分</text>
+
+  <rect x="718" y="362" width="170" height="76" rx="7" class="sub-orange"/>
+  <text x="732" y="380" class="box-title">辩论赛直播间</text>
+  <text x="732" y="397" class="small">26–77 条日志</text>
+  <text x="732" y="413" class="small">group_relay 26–27 次</text>
+  <text x="732" y="429" class="small">只做直播 / 回放</text>
+
+  <rect x="342" y="448" width="546" height="30" rx="6" class="sub-orange"/>
+  <text x="356" y="468" class="small">每场结束：归档旧群 → 写战绩进每个 Bot 记忆 → 建新群 → 重置成员 Session</text>
+  <text x="342" y="496" class="small">主持人串行链无法用 Rust 并行化；Rust 只降低每次派活的周边写入成本。</text>
+  <text x="342" y="514" class="small">第一场 22 次 paused（接力上限 24），后三场改私聊派活后 0 次。</text>
+
+  <rect x="326" y="558" width="578" height="44" rx="7" class="sub"/>
+  <text x="342" y="574" class="box-title">回合与路由 / 投递</text>
+  <text x="342" y="590" class="box-text">turns · delivery · handoffs · 权限 · 审批 · 停止</text>
+  <rect x="326" y="606" width="578" height="44" rx="7" class="sub"/>
+  <text x="342" y="622" class="box-title">群聊与记忆</text>
+  <text x="342" y="638" class="box-text">groups · debate · memory · parts · 分段 / 交接</text>
+  <rect x="326" y="654" width="578" height="44" rx="7" class="sub"/>
+  <text x="342" y="670" class="box-title">HTTP API 与 SSE</text>
+  <text x="342" y="686" class="box-text">view() · live() · feed · room-progress</text>
+  <rect x="326" y="702" width="578" height="44" rx="7" class="sub"/>
+  <text x="342" y="718" class="box-title">索引编排</text>
+  <text x="342" y="734" class="box-text">catchUp · eventsBackwards · historyEntry</text>
+
+  <rect x="326" y="758" width="578" height="120" rx="7" class="highlight"/>
+  <text x="342" y="780" class="box-title">state：内存权威工作副本（实测 273,792 字符）</text>
+  <text x="342" y="800" class="box-text">exchanges 192,646（70.4%）· rooms 47,631（17.4%）</text>
+  <text x="342" y="818" class="box-text">debate 16,320（6.0%）· bots 15,410（5.6%）</text>
+  <text x="342" y="838" class="box-text">热路径：saveSoon / appendExchange / setTurns / appendRoomLine</text>
+  <text x="342" y="856" class="box-text">目标热 core &lt; 40KB；归档移出 state.json</text>
+
+  <!-- napi strip -->
+  <rect x="940" y="260" width="64" height="630" rx="10" class="napi"/>
+  <text x="972" y="292" text-anchor="middle" class="napi-title">napi-rs</text>
+  <text x="972" y="308" text-anchor="middle" class="napi-sub">Node-API</text>
+  <text x="972" y="324" text-anchor="middle" class="napi-sub">异步 · 批量</text>
+  <text x="972" y="356" text-anchor="middle" class="napi-sub">单队列</text>
+  <text x="972" y="440" text-anchor="middle" class="napi-sub">写入</text>
+  <text x="972" y="580" text-anchor="middle" class="napi-sub">归档</text>
+  <text x="972" y="760" text-anchor="middle" class="napi-sub">索引</text>
+
+  <!-- Rust data plane -->
+  <rect x="1024" y="260" width="370" height="630" rx="12" class="rust"/>
+  <text x="1040" y="286" class="panel-title">Rust 数据面</text>
+
+  <rect x="1024" y="306" width="370" height="230" rx="7" class="sub-green"/>
+  <text x="1040" y="328" class="box-title">store 线程（唯一写者）</text>
+  <text x="1040" y="352" class="bullet">• 热 core 快照 + WAL（core/exchange/turns/room）</text>
+  <text x="1040" y="376" class="bullet">• 分组提交 ≤ 250ms；save 立即 fsync</text>
+  <text x="1040" y="400" class="bullet">• 尾部截断 · 崩溃恢复 · 压实</text>
+  <text x="1040" y="424" class="bullet">• 写前校验 state.lock token</text>
+  <text x="1040" y="448" class="bullet">• 队列背压 · 统计（queue/wal/errors）</text>
+  <text x="1040" y="472" class="bullet">• 目标：热 core 274K 字符 → &lt; 40K</text>
+  <text x="1040" y="504" class="small">核心收益：595KB 全量写 → KB 级提交 + 追加</text>
+
+  <rect x="1024" y="548" width="370" height="170" rx="7" class="sub-green"/>
+  <text x="1040" y="570" class="box-title">archive（归档）</text>
+  <text x="1040" y="594" class="bullet">• archive/rooms.jsonl：已结束群的日志</text>
+  <text x="1040" y="618" class="bullet">• archive/debate.jsonl：每场战绩</text>
+  <text x="1040" y="642" class="bullet">• 追加 + id 幂等；按条数保留</text>
+  <text x="1040" y="666" class="bullet">• 历史页按需读，不参与每次 save</text>
+  <text x="1040" y="694" class="small">实测：4 个群 + 3 场战绩约占 state 23%</text>
+
+  <rect x="1024" y="730" width="370" height="100" rx="7" class="sub-green"/>
+  <text x="1040" y="752" class="box-title">index 线程</text>
+  <text x="1040" y="776" class="bullet">• rusqlite + FTS5 trigram</text>
+  <text x="1040" y="798" class="bullet">• insertBatch：行 + mark 一个事务</text>
+  <text x="1040" y="820" class="bullet">• 500 行/批；实测日志 9.19MB</text>
+
+  <text x="1040" y="860" class="note">usage.sqlite：可选 R3；实测 42 次调用，先不改</text>
+
+  <!-- Storage -->
+  <rect x="1414" y="260" width="326" height="630" rx="12" class="storage"/>
+  <text x="1430" y="286" class="panel-title">磁盘（DSH_HOME）</text>
+
+  <rect x="1430" y="306" width="294" height="86" rx="7" class="sub-amber"/>
+  <text x="1446" y="328" class="box-title">state.json</text>
+  <text x="1446" y="348" class="box-text">热 core 兼容快照</text>
+  <text x="1446" y="366" class="box-text">目标 &lt; 40KB（当前 595KB）</text>
+  <text x="1446" y="384" class="box-text">压实 / 迁移 / 关闭时重写</text>
+
+  <rect x="1430" y="402" width="294" height="86" rx="7" class="sub-amber"/>
+  <text x="1446" y="424" class="box-title">state.wal</text>
+  <text x="1446" y="444" class="box-text">core · exchange · turns · room</text>
+  <text x="1446" y="462" class="box-text">len + CRC32C + rev</text>
+  <text x="1446" y="480" class="box-text">分组 fsync；压实后轮换</text>
+
+  <rect x="1430" y="498" width="294" height="86" rx="7" class="sub-amber"/>
+  <text x="1446" y="520" class="box-title">archive/rooms.jsonl</text>
+  <text x="1446" y="540" class="box-text">已归档群日志 + 结果</text>
+  <text x="1446" y="558" class="box-text">4 个群实测 47,631 字符</text>
+  <text x="1446" y="576" class="box-text">追加；按条数保留</text>
+
+  <rect x="1430" y="594" width="294" height="86" rx="7" class="sub-amber"/>
+  <text x="1446" y="616" class="box-title">archive/debate.jsonl</text>
+  <text x="1446" y="636" class="box-text">每场战绩 / 结果</text>
+  <text x="1446" y="654" class="box-text">3 场已结束 + 当前场</text>
+  <text x="1446" y="672" class="box-text">历史页按需读</text>
+
+  <rect x="1430" y="690" width="294" height="70" rx="7" class="sub-amber"/>
+  <text x="1446" y="712" class="box-title">chat-index.sqlite</text>
+  <text x="1446" y="732" class="box-text">FTS5 · 实测 251 行</text>
+  <text x="1446" y="750" class="box-text">可删除重建</text>
+
+  <rect x="1430" y="770" width="294" height="70" rx="7" class="sub-amber"/>
+  <text x="1446" y="792" class="box-title">state.lock / usage.sqlite</text>
+  <text x="1446" y="812" class="box-text">锁：JS 心跳，Rust 只读</text>
+  <text x="1446" y="830" class="box-text">usage：42 次调用，R3 可选</text>
+
+  <text x="1430" y="862" class="note">只读宿主：读快照 / WAL / 归档；不写。</text>
+
+  <!-- DSH <-> JS -->
+  <line x1="290" y1="338" x2="308" y2="338" class="flow-dsh" marker-end="url(#a-indigo)"/>
+  <line x1="308" y1="350" x2="290" y2="350" class="flow-dsh" marker-end="url(#a-indigo)"/>
+  <line x1="290" y1="500" x2="308" y2="500" class="flow-dsh" marker-end="url(#a-indigo)"/>
+  <line x1="308" y1="512" x2="290" y2="512" class="flow-dsh" marker-end="url(#a-indigo)"/>
+  <line x1="290" y1="600" x2="308" y2="600" class="flow-event" marker-end="url(#a-gray)"/>
+  <circle cx="300" cy="322" r="10" class="badge"/>
+  <text x="300" y="326" text-anchor="middle" class="num">2</text>
+  <circle cx="300" cy="582" r="10" class="badge"/>
+  <text x="300" y="586" text-anchor="middle" class="num">6</text>
+
+  <!-- JS <-> Rust -->
+  <line x1="920" y1="400" x2="938" y2="400" class="flow-native" marker-end="url(#a-green)"/>
+  <line x1="1006" y1="400" x2="1022" y2="400" class="flow-native" marker-end="url(#a-green)"/>
+  <line x1="1022" y1="440" x2="1006" y2="440" class="flow-native-back" marker-end="url(#a-green-dash)"/>
+  <line x1="938" y1="440" x2="922" y2="440" class="flow-native-back" marker-end="url(#a-green-dash)"/>
+
+  <line x1="920" y1="580" x2="938" y2="580" class="flow-native" marker-end="url(#a-green)"/>
+  <line x1="1006" y1="580" x2="1022" y2="580" class="flow-native" marker-end="url(#a-green)"/>
+  <line x1="1022" y1="620" x2="1006" y2="620" class="flow-native-back" marker-end="url(#a-green-dash)"/>
+  <line x1="938" y1="620" x2="922" y2="620" class="flow-native-back" marker-end="url(#a-green-dash)"/>
+
+  <line x1="920" y1="760" x2="938" y2="760" class="flow-native" marker-end="url(#a-green)"/>
+  <line x1="1006" y1="760" x2="1022" y2="760" class="flow-native" marker-end="url(#a-green)"/>
+  <line x1="1022" y1="800" x2="1006" y2="800" class="flow-native-back" marker-end="url(#a-green-dash)"/>
+  <line x1="938" y1="800" x2="922" y2="800" class="flow-native-back" marker-end="url(#a-green-dash)"/>
+
+  <circle cx="930" cy="378" r="10" class="badge"/>
+  <text x="930" y="382" text-anchor="middle" class="num">3</text>
+  <circle cx="930" cy="460" r="10" class="badge"/>
+  <text x="930" y="464" text-anchor="middle" class="num">4</text>
+
+  <!-- Rust <-> storage -->
+  <line x1="1396" y1="350" x2="1412" y2="350" class="flow-storage" marker-end="url(#a-amber)"/>
+  <line x1="1396" y1="444" x2="1412" y2="444" class="flow-storage" marker-end="url(#a-amber)"/>
+  <line x1="1396" y1="540" x2="1412" y2="540" class="flow-storage" marker-end="url(#a-amber)"/>
+  <line x1="1396" y1="636" x2="1412" y2="636" class="flow-storage" marker-end="url(#a-amber)"/>
+  <line x1="1396" y1="732" x2="1412" y2="732" class="flow-storage" marker-end="url(#a-amber)"/>
+  <line x1="1412" y1="810" x2="1398" y2="810" class="flow-storage-back" marker-end="url(#a-amber-dash)"/>
+  <circle cx="1404" cy="300" r="10" class="badge"/>
+  <text x="1404" y="304" text-anchor="middle" class="num">5</text>
+
+  <!-- Bottom -->
+  <rect x="40" y="930" width="560" height="220" rx="12" class="bottom"/>
+  <text x="60" y="958" class="box-title">实测热点（按收益排序）</text>
+  <text x="60" y="986" class="small">1. state 全量写：595KB x 922 revision ≈ 523MB</text>
+  <text x="60" y="1010" class="small">2. exchanges 占 state 70.4%；每次追加都重写</text>
+  <text x="60" y="1034" class="small">3. 归档群 / 战绩占 23%；应移出热 core</text>
+  <text x="60" y="1058" class="small">4. 会话日志 9.19MB；索引 251 行</text>
+  <text x="60" y="1082" class="small">5. usage 42 次调用；同步 SQLite，但暂不痛</text>
+  <text x="60" y="1106" class="small">6. 缓存命中 11.5%；主持人 31.8%</text>
+  <text x="60" y="1130" class="note">模型串行链不在 Rust 范围。</text>
+
+  <rect x="620" y="930" width="560" height="220" rx="12" class="bottom"/>
+  <text x="640" y="958" class="box-title">Rust 接手 / 不接手</text>
+  <text x="640" y="986" class="small">接手：exchange / turns / room 追加写</text>
+  <text x="640" y="1010" class="small">接手：归档 rooms / debate 战绩</text>
+  <text x="640" y="1034" class="small">接手：state 快照 + WAL + 压实 + 恢复</text>
+  <text x="640" y="1058" class="small">接手：chat-index 的 SQLite 线程</text>
+  <text x="640" y="1082" class="small">不接手：主持人 S1–S9 串行决策</text>
+  <text x="640" y="1106" class="small">不接手：模型调用、评分规则、群 relay 语义</text>
+  <text x="640" y="1130" class="note">迁移不改产品流程；先拿基线再动。</text>
+
+  <rect x="1200" y="930" width="560" height="220" rx="12" class="bottom"/>
+  <text x="1220" y="958" class="box-title">图例与读图</text>
+  <line x1="1220" y1="982" x2="1248" y2="982" stroke="#334155" stroke-width="1.6"/>
+  <text x="1258" y="986" class="legend">实线：调用</text>
+  <line x1="1220" y1="1006" x2="1248" y2="1006" stroke="#334155" stroke-width="1.6" stroke-dasharray="5 4"/>
+  <text x="1258" y="1010" class="legend">虚线：回调 / 事件</text>
+  <text x="1220" y="1040" class="legend">橙：辩论流程　蓝：JS 控制面</text>
+  <text x="1220" y="1064" class="legend">绿：Rust 数据面　琥珀：磁盘</text>
+  <text x="1220" y="1088" class="legend">state：JS 内存副本 + Rust 持久化模型</text>
+  <text x="1220" y="1112" class="legend">热 core &lt; 40KB；归档独立追加</text>
+  <text x="1220" y="1136" class="legend">辩论墙钟由模型串行链决定，Rust 只降周边成本</text>
+</svg>

@@ -352,6 +352,9 @@ export function install(rt) {
         case 'schedule-delete':
           await rt.load()
           return ok(await rt.scheduleEndpoint(endpoint, body))
+        case 'debate':
+          await rt.load()
+          return ok(await rt.debateEndpoint(body.action, body))
         case 'memory-view':
         case 'memory-ask':
         case 'memory-forget':

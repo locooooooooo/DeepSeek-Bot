@@ -1,0 +1,203 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1500 920" width="1500" height="920" role="img" aria-labelledby="title desc">
+  <title id="title">多人辩论调度：串行接力 vs 阶段波次并行</title>
+  <desc id="desc">示例 6 个 Bot，单个回复 3 到 5 秒。左侧现状严格串行，总计约 24 秒，且单个成员最长可阻塞 240 秒；右侧按阶段和波次并行，同一波次共享快照，提交屏障按槽位顺序保序提交，超时者以 late 追加，总计约 11 秒。</desc>
+
+  <defs>
+    <marker id="a-gray" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#94a3b8"/></marker>
+    <marker id="a-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#059669"/></marker>
+    <marker id="a-red" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#dc2626"/></marker>
+  </defs>
+
+  <style>
+    text { font-family: ui-sans-serif, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; }
+    .title { font-size: 22px; font-weight: 700; fill: #0f172a; }
+    .subtitle { font-size: 12.5px; fill: #64748b; }
+    .panel-title { font-size: 14.5px; font-weight: 700; fill: #0f172a; }
+    .box-title { font-size: 12px; font-weight: 700; fill: #0f172a; }
+    .box-text { font-size: 10.5px; fill: #475569; }
+    .note { font-size: 10.5px; fill: #64748b; }
+    .tiny { font-size: 9.5px; fill: #64748b; }
+    .serial-panel { fill: #fff7ed; stroke: #fdba74; stroke-width: 1.5; }
+    .debate-panel { fill: #ecfdf5; stroke: #6ee7b7; stroke-width: 1.5; }
+    .serial-bar { fill: #fed7aa; stroke: #f97316; stroke-width: 1.2; }
+    .draft-bar { fill: #d1fae5; stroke: #34d399; stroke-width: 1.2; }
+    .commit-bar { fill: #10b981; stroke: #059669; stroke-width: 1.2; }
+    .late-bar { fill: #fecaca; stroke: #dc2626; stroke-width: 1.2; stroke-dasharray: 4 3; }
+    .commit-text { font-size: 11px; font-weight: 700; fill: #ffffff; }
+    .late-text { font-size: 11px; font-weight: 700; fill: #991b1b; }
+    .snapshot { fill: #a7f3d0; stroke: #059669; stroke-width: 1.2; }
+    .axis { stroke: #cbd5e1; stroke-width: 1; }
+    .barrier { stroke: #7c3aed; stroke-width: 1.6; stroke-dasharray: 6 4; }
+    .flow { stroke: #059669; stroke-width: 1.6; fill: none; }
+    .note-box { fill: #ffffff; stroke: #e2e8f0; stroke-width: 1; }
+    .step { fill: #f8fafc; stroke: #94a3b8; stroke-width: 1.2; }
+  </style>
+
+  <rect width="1500" height="920" fill="#ffffff"/>
+
+  <text x="40" y="40" class="title">多人辩论调度：串行接力 vs 阶段波次并行</text>
+  <text x="40" y="66" class="subtitle">示例：6 个 Bot，单个回复 3–5 秒。串行约 24 秒；K=3 的波次并行约 11 秒，提交顺序仍然固定</text>
+
+  <!-- Left: serial -->
+  <rect x="40" y="100" width="690" height="680" rx="14" class="serial-panel"/>
+  <text x="60" y="132" class="panel-title">现状：严格串行（everyone / admin 模式）</text>
+  <text x="60" y="154" class="box-text">每个成员等上一个 turn/end；一个成员挂起，整轮最长等 240 秒</text>
+
+  <!-- axis -->
+  <line x1="120" y1="176" x2="648" y2="176" class="axis"/>
+  <text x="120" y="168" text-anchor="middle" class="tiny">0s</text>
+  <text x="208" y="168" text-anchor="middle" class="tiny">4s</text>
+  <text x="296" y="168" text-anchor="middle" class="tiny">8s</text>
+  <text x="384" y="168" text-anchor="middle" class="tiny">12s</text>
+  <text x="472" y="168" text-anchor="middle" class="tiny">16s</text>
+  <text x="560" y="168" text-anchor="middle" class="tiny">20s</text>
+  <text x="648" y="168" text-anchor="middle" class="tiny">24s</text>
+
+  <!-- rows: start times 0,4,7,12,16,19; durations 4,3,5,4,3,5 -->
+  <text x="72" y="223" class="box-title">A</text>
+  <rect x="120" y="200" width="88" height="36" rx="6" class="serial-bar"/>
+  <text x="164" y="223" text-anchor="middle" class="box-text">A · 4s</text>
+
+  <text x="72" y="295" class="box-title">B</text>
+  <rect x="208" y="272" width="66" height="36" rx="6" class="serial-bar"/>
+  <text x="241" y="295" text-anchor="middle" class="box-text">B · 3s</text>
+
+  <text x="72" y="367" class="box-title">C</text>
+  <rect x="274" y="344" width="110" height="36" rx="6" class="serial-bar"/>
+  <text x="329" y="367" text-anchor="middle" class="box-text">C · 5s</text>
+
+  <text x="72" y="439" class="box-title">D</text>
+  <rect x="384" y="416" width="88" height="36" rx="6" class="serial-bar"/>
+  <text x="428" y="439" text-anchor="middle" class="box-text">D · 4s</text>
+
+  <text x="72" y="511" class="box-title">E</text>
+  <rect x="472" y="488" width="66" height="36" rx="6" class="serial-bar"/>
+  <text x="505" y="511" text-anchor="middle" class="box-text">E · 3s</text>
+
+  <text x="72" y="583" class="box-title">F</text>
+  <rect x="538" y="560" width="110" height="36" rx="6" class="serial-bar"/>
+  <text x="593" y="583" text-anchor="middle" class="box-text">F · 5s</text>
+
+  <!-- connectors -->
+  <path d="M208 218 L206 218 M208 218 L208 272" stroke="#f97316" stroke-width="1.2" fill="none" marker-end="url(#a-red)"/>
+  <path d="M274 290 L274 344" stroke="#f97316" stroke-width="1.2" fill="none" marker-end="url(#a-red)"/>
+  <path d="M384 362 L384 416" stroke="#f97316" stroke-width="1.2" fill="none" marker-end="url(#a-red)"/>
+  <path d="M472 434 L472 488" stroke="#f97316" stroke-width="1.2" fill="none" marker-end="url(#a-red)"/>
+  <path d="M538 506 L538 560" stroke="#f97316" stroke-width="1.2" fill="none" marker-end="url(#a-red)"/>
+
+  <text x="648" y="628" text-anchor="end" class="box-title">总计 ≈ 24s</text>
+
+  <rect x="60" y="650" width="650" height="58" rx="8" class="note-box"/>
+  <text x="76" y="672" class="box-text">一个成员挂起：整轮最多等 240s（ROOM_REPLY_TIMEOUT_MS）</text>
+  <text x="76" y="692" class="box-text">用户看到的是“一个个出现”，但下一位必须等上一位完整结束</text>
+
+  <rect x="60" y="722" width="650" height="36" rx="8" class="note-box"/>
+  <text x="76" y="745" class="note">groups.js runRound：for (slot) { await roomTurn(...) }</text>
+
+  <!-- Right: debate waves -->
+  <rect x="770" y="100" width="690" height="680" rx="14" class="debate-panel"/>
+  <text x="790" y="132" class="panel-title">方案：debate 阶段波次 + 提交屏障</text>
+  <text x="790" y="154" class="box-text">同一波次共享快照并行生成；提交按槽位顺序保序完成；K=1 退化为串行</text>
+
+  <!-- axis -->
+  <line x1="850" y1="176" x2="1114" y2="176" class="axis"/>
+  <text x="850" y="168" text-anchor="middle" class="tiny">0s</text>
+  <text x="894" y="168" text-anchor="middle" class="tiny">2s</text>
+  <text x="938" y="168" text-anchor="middle" class="tiny">4s</text>
+  <text x="982" y="168" text-anchor="middle" class="tiny">6s</text>
+  <text x="1026" y="168" text-anchor="middle" class="tiny">8s</text>
+  <text x="1070" y="168" text-anchor="middle" class="tiny">10s</text>
+  <text x="1114" y="168" text-anchor="middle" class="tiny">12s</text>
+
+  <!-- snapshots -->
+  <rect x="850" y="184" width="110" height="22" rx="5" class="snapshot"/>
+  <text x="905" y="199" text-anchor="middle" class="tiny">快照 S</text>
+  <rect x="960" y="184" width="110" height="22" rx="5" class="snapshot"/>
+  <text x="1015" y="199" text-anchor="middle" class="tiny">快照 S'</text>
+
+  <!-- wave 1: A 4, B 3, C 5; all start 0 -->
+  <text x="810" y="240" class="box-title">A</text>
+  <rect x="850" y="218" width="88" height="34" rx="6" class="draft-bar"/>
+  <text x="894" y="240" text-anchor="middle" class="box-text">A · 4s</text>
+
+  <text x="810" y="296" class="box-title">B</text>
+  <rect x="850" y="274" width="66" height="34" rx="6" class="draft-bar"/>
+  <text x="883" y="296" text-anchor="middle" class="box-text">B · 3s</text>
+
+  <text x="810" y="352" class="box-title">C</text>
+  <rect x="850" y="330" width="110" height="34" rx="6" class="draft-bar"/>
+  <text x="905" y="352" text-anchor="middle" class="box-text">C · 5s</text>
+
+  <!-- barrier 1 at 5s -->
+  <line x1="960" y1="208" x2="960" y2="580" class="barrier"/>
+  <line x1="960" y1="265" x2="1126" y2="265" class="barrier"/>
+
+  <!-- wave 2: D 4, E 3, F 6 (late after 4s deadline); all start 5s -->
+  <text x="810" y="416" class="box-title">D</text>
+  <rect x="960" y="394" width="88" height="34" rx="6" class="draft-bar"/>
+  <text x="1004" y="416" text-anchor="middle" class="box-text">D · 4s</text>
+
+  <text x="810" y="472" class="box-title">E</text>
+  <rect x="960" y="450" width="66" height="34" rx="6" class="draft-bar"/>
+  <text x="993" y="472" text-anchor="middle" class="box-text">E · 3s</text>
+
+  <text x="810" y="528" class="box-title">F</text>
+  <rect x="960" y="506" width="88" height="34" rx="6" class="draft-bar"/>
+  <rect x="1048" y="506" width="44" height="34" rx="6" class="late-bar"/>
+  <text x="1004" y="528" text-anchor="middle" class="box-text">F · 5s</text>
+  <text x="1070" y="528" text-anchor="middle" class="tiny">late</text>
+
+  <!-- barrier 2 at 9s -->
+  <line x1="1048" y1="382" x2="1048" y2="580" class="barrier"/>
+  <line x1="1048" y1="436" x2="1126" y2="436" class="barrier"/>
+  <line x1="1092" y1="523" x2="1126" y2="523" stroke="#dc2626" stroke-width="1.2" stroke-dasharray="4 3"/>
+
+  <!-- commit column -->
+  <text x="1180" y="184" text-anchor="middle" class="box-title">提交（槽位顺序）</text>
+  <rect x="1128" y="210" width="104" height="110" rx="7" class="commit-bar"/>
+  <text x="1180" y="238" text-anchor="middle" class="commit-text">5s 提交</text>
+  <text x="1180" y="264" text-anchor="middle" class="commit-text">A → B → C</text>
+  <text x="1180" y="290" text-anchor="middle" class="commit-text">单写者保序</text>
+
+  <rect x="1128" y="386" width="104" height="100" rx="7" class="commit-bar"/>
+  <text x="1180" y="414" text-anchor="middle" class="commit-text">9s 提交</text>
+  <text x="1180" y="440" text-anchor="middle" class="commit-text">D → E</text>
+  <text x="1180" y="466" text-anchor="middle" class="commit-text">F 另见 late</text>
+
+  <rect x="1128" y="506" width="104" height="34" rx="7" class="late-bar"/>
+  <text x="1180" y="528" text-anchor="middle" class="late-text">11s F late</text>
+
+  <text x="1114" y="648" text-anchor="end" class="box-title">≈ 11s（K=3）</text>
+
+  <rect x="790" y="664" width="650" height="110" rx="8" class="note-box"/>
+  <text x="806" y="686" class="box-text">同一波次：所有成员看到同一份快照，互相不可见</text>
+  <text x="806" y="706" class="box-text">下一波次：看到上一波次按槽位提交的全部内容</text>
+  <text x="806" y="726" class="box-text">墙钟 ≈ Σ 每波最慢者 + 提交；超时者以 late 追加，不阻塞</text>
+  <text x="806" y="746" class="box-text">429 / provider 限流：turn broker 降 K、退避，严重时退回串行</text>
+  <text x="806" y="766" class="box-text">浅绿＝生成/草稿；深绿＝提交；红色虚线＝late</text>
+
+  <!-- Bottom flow -->
+  <rect x="40" y="810" width="1420" height="80" rx="12" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1.5"/>
+  <text x="60" y="838" class="box-title">一次波次的时序</text>
+
+  <rect x="200" y="820" width="210" height="44" rx="8" class="step"/>
+  <text x="305" y="846" text-anchor="middle" class="box-text">阶段 / 波次快照</text>
+  <line x1="414" y1="842" x2="446" y2="842" class="flow" marker-end="url(#a-green)"/>
+
+  <rect x="450" y="820" width="210" height="44" rx="8" class="step"/>
+  <text x="555" y="846" text-anchor="middle" class="box-text">并行派发 ≤ K</text>
+  <line x1="664" y1="842" x2="696" y2="842" class="flow" marker-end="url(#a-green)"/>
+
+  <rect x="700" y="820" width="210" height="44" rx="8" class="step"/>
+  <text x="805" y="846" text-anchor="middle" class="box-text">草稿流 SSE</text>
+  <line x1="914" y1="842" x2="946" y2="842" class="flow" marker-end="url(#a-green)"/>
+
+  <rect x="950" y="820" width="230" height="44" rx="8" class="step"/>
+  <text x="1065" y="846" text-anchor="middle" class="box-text">提交屏障（槽位顺序）</text>
+  <line x1="1184" y1="842" x2="1216" y2="842" class="flow" marker-end="url(#a-green)"/>
+
+  <rect x="1220" y="820" width="210" height="44" rx="8" class="step"/>
+  <text x="1325" y="846" text-anchor="middle" class="box-text">下一波次 / 阶段</text>
+
+  <text x="60" y="882" class="note">JS：调度、DSH 调用、超时与顺序判定；Rust：appendRoomLines 保序提交 + room journal + WAL。</text>
+</svg>
