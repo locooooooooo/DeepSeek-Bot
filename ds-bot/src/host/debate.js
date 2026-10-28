@@ -351,8 +351,8 @@ export function install(rt) {
   }
 
   const resetText = (bot, number) => {
-    const base = `【第${number}场】上一场已归档；本场从零开始，历届战绩保留在记忆里，但不要把它当作本场论据。等待主持人的调度，不要提问。`
-    if (bot.role === '评委') return `${base} 不要往群里发消息；只在 S9 私聊回主持人评分。`
+    const base = `【第${number}场】上一场已归档；本场从零开始，历届战绩保留在记忆里，但不要把它当作本场论据。本场赛制、环节与发言格式只以你当前的说明书为准；历史消息里出现过的环节名、转场话术、发言标签和发言格式都是往届的，一律不得沿用。等待主持人的调度，不要提问。`
+    if (bot.role === '评委') return `${base} 不要往群里发消息；只在收到私聊评分请求时回一次。`
     if (bot.role === '核查') return `${base} 你是新群的管理员，但保持静默；核查结果私聊回主持人。`
     if (bot.role === '气氛') return `${base} 只在新群用自己的身份发弹幕。`
     return base
@@ -408,6 +408,11 @@ export function install(rt) {
       await rt.updateRoom(room.id, { name: oldName }).catch(() => {})
       throw new Error(`The next group could not be created: ${error?.message ?? error}`)
     }
+    // The default relay limit (3 × members) is a chat group's guard against Bots
+    // answering Bots forever. A show fills it in one match — the host's calls alone
+    // can park the judges mid-scoring. The stage gets double headroom; the watchdog
+    // above, not this counter, is what bounds a runaway match.
+    nextRoom.relayLimit = 6 * memberIds.length
 
     if (typeof rt.memoryAdd === 'function') {
       for (const id of memberIds) {
@@ -439,6 +444,16 @@ export function install(rt) {
     }]
     await rt.save()
 
+    // Every member's own chat starts the match on a fresh part: the show's format
+    // lives in the template's cards, and clean own chats keep the last matches'
+    // worked examples from dragging a new format back.
+    if (typeof rt.freshPart === 'function') {
+      for (const id of [hostId, ...memberIds.filter(id => id !== hostId)]) {
+        const rolled = await rt.freshPart(id, 'a new debate match begins, and the old part stays behind')
+        if (rolled !== true) warnings.push(`${rt.botOf(id)?.name ?? id}: own chat was not moved to a fresh part`)
+      }
+    }
+
     for (const id of memberIds) {
       if (id === hostId) continue
       const bot = rt.botOf(id)
@@ -450,7 +465,7 @@ export function install(rt) {
     }
     const topicLine = topicOf(template.rules) || template.name
     try {
-      await sendToBot(hostId, `【第${number + 1}场开始】上一场已归档为「${archivedName}」；本场从零开始，历届战绩保留在记忆里，但不要把它当作本场论据。本场辩题：${topicLine}。新群是「${DEBATE_ROOM}」。请按 v3 规则开始第${number + 1}场：先发 S1，然后用 message_bot 私聊派活；所有正式发言由本人 post_to_group 发到群里；评委只在 S9 评分一次。`)
+      await sendToBot(hostId, `【第${number + 1}场开始】上一场已归档为「${archivedName}」；本场从零开始，历届战绩保留在记忆里，但不要把它当作本场论据，往届的赛制、环节名、转场话术与发言标签一律作废——包括你自己上一场用过的。本场辩题：${topicLine}。新群是「${DEBATE_ROOM}」。开赛前先重读你当前的说明书，把它的流程逐项列出再开始；说明书没有的环节一律没有，说明书禁止的话术一句都不许上屏。调度、追问、弹幕请求、评分请求一律用 message_bot 私聊，绝不 post_to_group；群里只出现你说明书允许的帖子。所有正式发言由本人 post_to_group 发到群里，发言标签用你调度指令里给出的原文。`)
     } catch (error) {
       warnings.push(`主持人: ${error?.message ?? error}`)
     }
